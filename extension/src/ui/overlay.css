@@ -1,0 +1,469 @@
+/* 플레이어 기본 자막 위에 얹히는 별도 오버레이 레이어.
+   플레이어 컨트롤(유튜브 z-index ~59)보다 위에 둔다. */
+
+.lfjp-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 11%;
+  transform: translateX(-50%);
+  z-index: 60;
+  max-width: 92%;
+  text-align: center;
+  /* 라인 자체는 클릭을 통과시키고(재생/일시정지 방해 금지), 단어 span 만 받는다 */
+  pointer-events: none;
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Apple SD Gothic Neo",
+    "Noto Sans KR", sans-serif;
+  line-height: 1.35;
+}
+
+.lfjp-line {
+  display: block;
+  padding: 2px 10px;
+  margin: 2px 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.62);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 학습 대상 언어 — 시선이 먼저 가야 하므로 더 크게 */
+.lfjp-ja {
+  font-size: 26px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+/* 모국어 보조 라인 — 의도적으로 덜 튀게 */
+.lfjp-ko {
+  font-size: 18px;
+  font-weight: 400;
+  color: #ffd966;
+}
+
+/* ---------------------------------------------------------------- 단어 */
+
+.lfjp-word {
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+.lfjp-word:hover {
+  background: rgba(78, 161, 255, 0.35);
+}
+
+/* 사용자 레벨 기준으로 백엔드가 골라준 학습 대상 표현 */
+.lfjp-hl {
+  color: #7ec8ff;
+  border-bottom: 2px solid rgba(126, 200, 255, 0.75);
+}
+
+/* ---------------------------------------------------------------- 툴팁 */
+
+.lfjp-tooltip {
+  position: absolute;
+  z-index: 61;
+  pointer-events: auto;
+  min-width: 180px;
+  max-width: 340px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(18, 18, 20, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  color: #f2f2f2;
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Apple SD Gothic Neo",
+    "Noto Sans KR", sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: left;
+  text-shadow: none;
+}
+
+.lfjp-tip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.lfjp-tip-surface {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.lfjp-tip-jlpt {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #2f6fb0;
+  color: #fff;
+}
+
+.lfjp-tip-row {
+  display: flex;
+  gap: 8px;
+}
+
+.lfjp-tip-key {
+  flex: 0 0 34px;
+  color: #9aa0a6;
+  font-size: 12px;
+}
+
+.lfjp-tip-val {
+  flex: 1;
+  word-break: break-word;
+}
+
+.lfjp-tip-note {
+  color: #9aa0a6;
+  font-size: 12px;
+}
+
+.lfjp-tip-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.lfjp-tip-actions button {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.lfjp-tip-save {
+  background: #4ea1ff;
+  color: #08111c;
+  font-weight: 700;
+}
+
+.lfjp-tip-close {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #ddd;
+}
+
+.lfjp-tip-status {
+  min-height: 16px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #9aa0a6;
+}
+
+.lfjp-tip-status.lfjp-ok { color: #7ee787; }
+.lfjp-tip-status.lfjp-err { color: #ff8a8a; }
+
+/* 세로형(쇼츠)에서는 화면이 좁아 글자를 줄인다 */
+@media (max-width: 700px) {
+  .lfjp-ja { font-size: 20px; }
+  .lfjp-ko { font-size: 15px; }
+}
+
+/* ── 트랜스크립트 패널 ─────────────────────────────────────────────
+   영상 옆 칼럼에 붙는다. 유튜브 다크 테마에 얹히므로 자체 배경을 갖는다. */
+
+.lfjp-panel {
+  margin-bottom: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(20, 20, 22, 0.96);
+  color: #fff;
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Apple SD Gothic Neo",
+    "Noto Sans KR", sans-serif;
+  overflow: hidden;
+}
+
+.lfjp-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.lfjp-panel-title { font-size: 14px; font-weight: 700; }
+.lfjp-panel-count { font-size: 12px; color: rgba(255, 255, 255, 0.55); flex: 1; }
+
+.lfjp-panel-filter {
+  padding: 3px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.lfjp-panel-filter:hover { background: rgba(255, 255, 255, 0.1); }
+.lfjp-panel-filter.on { background: #ffd966; border-color: #ffd966; color: #1a1a1a; }
+
+/* 화면 높이에 맞춰 스크롤. 목록만 스크롤되고 헤더는 남는다. */
+.lfjp-panel-list { max-height: min(64vh, 720px); overflow-y: auto; }
+
+.lfjp-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+.lfjp-row:hover { background: rgba(255, 255, 255, 0.06); }
+.lfjp-row-hidden { display: none; }
+
+/* 재생 중인 줄 — 왼쪽 띠로 표시해서 글자 대비를 해치지 않는다. */
+.lfjp-row-on {
+  background: rgba(255, 217, 102, 0.1);
+  box-shadow: inset 3px 0 0 #ffd966;
+}
+
+.lfjp-row-time { font-size: 11px; color: rgba(255, 255, 255, 0.45); margin-bottom: 3px; }
+.lfjp-row-ja { font-size: 15px; line-height: 1.5; }
+.lfjp-row-ko { font-size: 13px; line-height: 1.45; color: #ffd966; margin-top: 3px; }
+
+/* 자막이 아직 없거나 못 가져온 상태 — 패널은 비어 있어도 떠 있어야 한다. */
+.lfjp-status {
+  padding: 16px 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* ── 탭 (대사 / 내 단어) ───────────────────────────────────────── */
+.lfjp-tab {
+  padding: 3px 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lfjp-tab:hover { color: #fff; }
+.lfjp-tab.on { background: rgba(255, 255, 255, 0.14); color: #fff; }
+
+/* ── 저장한 단어 ───────────────────────────────────────────────── */
+.lfjp-word-row {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.lfjp-word-seekable { cursor: pointer; }
+.lfjp-word-seekable:hover { background: rgba(255, 255, 255, 0.06); }
+
+.lfjp-word-head { display: flex; align-items: baseline; gap: 7px; }
+.lfjp-word-surface { font-size: 16px; font-weight: 700; }
+.lfjp-word-reading { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
+
+.lfjp-word-jlpt {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 217, 102, 0.2);
+  color: #ffd966;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* 삭제는 오른쪽 끝으로 밀되 평소엔 눈에 띄지 않게 둔다. */
+.lfjp-word-del {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.lfjp-word-del:hover { border-color: #ff6b6b; color: #ff6b6b; }
+.lfjp-word-del:disabled { opacity: 0.4; cursor: default; }
+
+.lfjp-word-gloss { margin-top: 4px; font-size: 13px; }
+.lfjp-word-ctx {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.55);
+}
+.lfjp-word-meta { margin-top: 5px; font-size: 11px; color: rgba(255, 255, 255, 0.4); }
+
+/* Netflix는 우측 칼럼이 없어 플레이어 위에 접이식 패널 영역을 둔다. */
+.lfjp-netflix-panel-mount {
+  position: absolute;
+  top: 8%;
+  right: 16px;
+  z-index: 62;
+  width: min(390px, 36vw);
+  max-height: 82%;
+  pointer-events: auto;
+}
+.lfjp-netflix-panel-mount .lfjp-panel {
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.55);
+}
+
+@media (max-width: 900px) {
+  .lfjp-netflix-panel-mount { width: min(340px, 46vw); right: 8px; }
+}
+
+/* ── 쉐도잉 ───────────────────────────────────────────────────── */
+.lfjp-shadowing { padding: 12px; box-sizing: border-box; }
+.lfjp-shadow-progress {
+  margin-bottom: 8px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  text-align: right;
+}
+.lfjp-shadow-card {
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.lfjp-shadow-text {
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+.lfjp-shadow-translation {
+  margin-top: 5px;
+  color: #ffd966;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.lfjp-shadow-actions,
+.lfjp-shadow-nav,
+.lfjp-shadow-start,
+.lfjp-shadow-rating {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 14px;
+}
+.lfjp-shadow-actions button,
+.lfjp-shadow-nav button,
+.lfjp-shadow-start button,
+.lfjp-shadow-rating button {
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.lfjp-shadow-actions button:hover,
+.lfjp-shadow-nav button:hover,
+.lfjp-shadow-start button:hover,
+.lfjp-shadow-rating button:hover { background: rgba(255, 255, 255, 0.15); }
+.lfjp-shadow-actions button:disabled,
+.lfjp-shadow-nav button:disabled { opacity: 0.35; cursor: default; }
+.lfjp-shadow-actions .lfjp-shadow-record,
+.lfjp-shadow-actions .primary,
+.lfjp-shadow-nav .primary,
+.lfjp-shadow-start .primary,
+.lfjp-shadow-rating .primary {
+  border-color: #4ea1ff;
+  background: #4ea1ff;
+  color: #07111d;
+  font-weight: 700;
+}
+.lfjp-shadow-actions .lfjp-shadow-record.recording {
+  border-color: #ff6b6b;
+  background: #ff6b6b;
+}
+.lfjp-shadow-status {
+  min-height: 18px;
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+}
+.lfjp-shadow-mine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+}
+.lfjp-shadow-mine audio { width: min(100%, 270px); height: 32px; }
+.lfjp-shadow-result {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.lfjp-shadow-score {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(78, 161, 255, 0.18);
+  color: #7ec8ff;
+  font-size: 20px;
+  font-weight: 800;
+}
+.lfjp-shadow-breakdown {
+  display: inline-block;
+  margin-left: 10px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+}
+.lfjp-shadow-feedback {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.lfjp-shadow-nav { justify-content: flex-end; }
+.lfjp-shadow-complete {
+  padding: 22px 12px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+}
+.lfjp-shadow-error { margin-top: 8px; color: #ff8a8a; font-size: 12px; }
+.lfjp-shadow-stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+.lfjp-shadow-stage {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10px;
+}
+.lfjp-shadow-stage.on { background: rgba(78, 161, 255, 0.22); color: #7ec8ff; }
+.lfjp-shadow-stage.done { color: #7ee787; }
+.lfjp-shadow-text.hidden {
+  color: rgba(255, 255, 255, 0.28);
+  letter-spacing: 4px;
+  user-select: none;
+}
+.lfjp-shadow-guide {
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.lfjp-shadow-hint {
+  margin-top: 7px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: rgba(255, 217, 102, 0.08);
+  color: #ffd966;
+  font-size: 11px;
+  line-height: 1.45;
+}

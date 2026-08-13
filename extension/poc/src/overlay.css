@@ -1,0 +1,49 @@
+/* 유튜브 기본 자막 위에 얹히는 별도 오버레이 레이어.
+   플레이어 컨트롤(z-index ~59)보다 위, 클릭은 통과시킨다. */
+
+.lfjp-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 11%;
+  transform: translateX(-50%);
+  z-index: 60;
+  max-width: 92%;
+  text-align: center;
+  pointer-events: none;
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Apple SD Gothic Neo",
+    "Noto Sans KR", sans-serif;
+  line-height: 1.35;
+}
+
+.lfjp-line {
+  display: inline-block;
+  padding: 2px 10px;
+  margin: 2px 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.62);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 학습 대상 언어 — 시선이 먼저 가야 하므로 더 크게 */
+.lfjp-ja {
+  display: block;
+  font-size: 26px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+/* 모국어 보조 라인 — 의도적으로 덜 튀게 */
+.lfjp-ko {
+  display: block;
+  font-size: 18px;
+  font-weight: 400;
+  color: #ffd966;
+}
+
+/* 세로형(쇼츠)에서는 화면이 좁아 글자를 줄인다 */
+@media (max-width: 700px) {
+  .lfjp-ja { font-size: 20px; }
+  .lfjp-ko { font-size: 15px; }
+}

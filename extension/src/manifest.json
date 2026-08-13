@@ -1,0 +1,63 @@
+{
+  "manifest_version": 3,
+  "name": "langflix — 한일 쉐도잉",
+  "version": "0.4.0",
+  "description": "유튜브·Netflix 한일 이중자막, 구간 반복, 무마이크 쉐도잉과 복습.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "langflix-jp 설정",
+    "default_popup": "ui/options.html"
+  },
+  "options_page": "ui/options.html",
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["adapters/youtube-injected.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.netflix.com/*"],
+      "js": ["adapters/netflix-injected.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://www.netflix.com/*"
+      ],
+      "js": [
+        "common/subtitle-source.js",
+        "common/api.js",
+        "common/tooltip.js",
+        "common/transcript.js",
+        "common/shadowing-practice.js",
+        "adapters/youtube.js",
+        "adapters/netflix.js",
+        "common/controller.js"
+      ],
+      "css": ["ui/overlay.css"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["adapters/youtube-injected.js"],
+      "matches": ["https://www.youtube.com/*"]
+    },
+    {
+      "resources": ["adapters/netflix-injected.js"],
+      "matches": ["https://www.netflix.com/*"]
+    }
+  ]
+}

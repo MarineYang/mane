@@ -1,0 +1,34 @@
+.DS_Store
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Go
+bin/
+coverage.out
+
+# JavaScript
+node_modules/
+dist/
+build/
+
+# Packaged browser extensions
+*.crx
+*.whx
+
+# Local runtime data
+*.log
+*.pid
+*.sqlite
+*.sqlite3

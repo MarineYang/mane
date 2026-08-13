@@ -1,0 +1,86 @@
+body {
+  width: 340px;
+  margin: 0;
+  padding: 16px;
+  font-family: "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  font-size: 14px;
+  color: #1f1f1f;
+  background: #fff;
+}
+
+h1 {
+  margin: 0 0 14px;
+  font-size: 16px;
+}
+
+.field {
+  display: block;
+  margin-bottom: 14px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+input,
+select {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+
+.hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b6b6b;
+}
+
+code {
+  background: #f1f1f1;
+  padding: 0 3px;
+  border-radius: 3px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  font: inherit;
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+}
+
+button.primary {
+  background: #4ea1ff;
+  border-color: #4ea1ff;
+  color: #fff;
+  font-weight: 700;
+}
+
+.status {
+  min-height: 18px;
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #6b6b6b;
+}
+
+.status.ok { color: #1a7f37; }
+.status.err { color: #c1121f; }
+
+.foot {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: #6b6b6b;
+}

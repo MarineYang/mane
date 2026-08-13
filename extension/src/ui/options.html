@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>langflix-jp 설정</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <h1>langflix-jp 설정</h1>
+
+    <label class="field">
+      <span class="label">학습 방향</span>
+      <select id="direction">
+        <option value="ja-ko">한국어 사용자 → 일본어 학습</option>
+        <option value="ko-ja">日本語話者 → 韓国語学習</option>
+      </select>
+      <span class="hint">유튜브에서 가져올 원문 자막과 번역 방향을 정합니다.</span>
+    </label>
+
+    <label class="field">
+      <span class="label">백엔드 주소</span>
+      <input id="backendUrl" type="text" spellcheck="false" placeholder="http://localhost:8080" />
+      <span class="hint">로컬 개발은 <code>http://localhost:8080</code>. 끝의 <code>/</code>는 없어도 됩니다.</span>
+    </label>
+
+    <label class="field">
+      <span class="label">내 JLPT 레벨</span>
+      <select id="level">
+        <option value="N5">N5 (입문)</option>
+        <option value="N4">N4</option>
+        <option value="N3">N3</option>
+        <option value="N2">N2</option>
+        <option value="N1">N1 (상급)</option>
+      </select>
+      <span class="hint">이 레벨을 기준으로 백엔드가 강조할 단어를 고릅니다.</span>
+    </label>
+
+    <div class="actions">
+      <button id="save" class="primary">저장</button>
+      <button id="test">연결 확인</button>
+    </div>
+
+    <p id="status" class="status"></p>
+
+    <p class="foot">
+      영상 위에서 <b>Alt + J</b>(macOS 는 <b>Option + J</b>)로 이중자막을 껐다 켤 수 있습니다.
+    </p>
+
+    <script src="options.js"></script>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "langflix-jp PoC (YouTube 이중자막)",
+  "version": "0.1.0",
+  "description": "유튜브에서 일본어 원자막 + 한국어 번역 2줄 오버레이를 표시하는 PoC. 파이프라인 검증용.",
+  "host_permissions": ["https://www.youtube.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["src/content.js"],
+      "css": ["src/overlay.css"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/injected.js"],
+      "matches": ["https://www.youtube.com/*"]
+    }
+  ]
+}
