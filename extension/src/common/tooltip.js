@@ -43,6 +43,7 @@
     statusEl.className = 'lfjp-tip-status';
 
     const res = await LFJP.api.saveExpression({
+      kind: 'word',
       surface: token.surface,
       reading: token.reading,
       gloss: token.gloss,

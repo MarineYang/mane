@@ -107,11 +107,14 @@ const ops = {
   },
 
   /** @returns {Promise<{expressions:Array, total:number}>} 최신 저장 순 */
-  async listExpressions({ limit, offset } = {}) {
+  async listExpressions({ limit, offset, from, to, kind } = {}) {
     const q = new URLSearchParams({
       limit: String(limit || 200),
       offset: String(offset || 0)
     });
+    if (from) q.set('from', from);
+    if (to) q.set('to', to);
+    if (kind) q.set('kind', kind);
     const json = await callBackend('/v1/expressions?' + q.toString(), null);
     return { expressions: (json && json.expressions) || [], total: (json && json.total) || 0 };
   },
@@ -121,9 +124,10 @@ const ops = {
     return { deleted: id };
   },
 
-  /** @param {{surface,reading,gloss,jlpt,context,source}} payload */
+  /** @param {{kind,surface,reading,gloss,jlpt,context,source}} payload */
   async saveExpression(payload) {
     const created = await callBackend('/v1/expressions', {
+      kind: payload.kind || 'word',
       surface: payload.surface,
       reading: payload.reading || '',
       gloss: payload.gloss || '',

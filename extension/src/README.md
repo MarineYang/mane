@@ -33,6 +33,8 @@ PoC(`../poc/`)에서 검증한 cue 취득·싱크 로직을 그대로 이어받�
 | 단어 하이라이트 | 일본어 줄의 단어에 hover 하면 반응, 레벨 대상 단어는 파란 밑줄 |
 | 툴팁 | 단어 클릭 → surface/읽기/JLPT/뜻 + `저장` 버튼 |
 | 표현 저장 | `저장` → "저장했습니다 ✓". `curl localhost:8080/v1/expressions` 로 확인 |
+| 문장 저장 | 대사 오른쪽 `☆` → `★`. 현재 자막 전체와 번역·영상 시각 저장 |
+| 보관함 | 날짜 이전/다음·달력·오늘 이동, `전체/단어/문장` 필터로 조회 |
 | 문장 반복 | `쉐도잉` 탭 → 세트 만들기 → `원음 듣기`/`구간 반복` |
 | 블라인드 발화 | 원음 반복 후 자막을 숨기고 직접 말한 다음 원음 확인 |
 | 자기평가 | 어려움/비슷함/자연스러움으로 복습 간격 결정 |
@@ -114,7 +116,8 @@ content script 의 fetch 는 확장 host_permissions 가 아니라 페이지 오
 |---|---|
 | cue 로드 직후 | `POST /v1/translate` — `{source_lang:"ja", target_lang:"ko", texts:[...]}`, 500개씩 청크 |
 | 화면에 뜰 cue + 다음 3개 | `POST /v1/nlp/analyze` — `{texts:[...], level:"N4"}`, 80ms 디바운스 배치 |
-| 저장 버튼 | `POST /v1/expressions` — `{surface, reading, gloss, jlpt, context, source:{platform, content_id, title, time_sec}}` |
+| 단어·문장 저장 | `POST /v1/expressions` — `{kind, surface, reading, gloss, jlpt, context, source:{platform, content_id, title, time_sec}}` |
+| 날짜별 보관함 | `GET /v1/expressions?from=<RFC3339>&to=<RFC3339>&kind=word|sentence` |
 
 - 토큰의 `start`/`end` 는 **UTF-16 코드 유닛 오프셋**이라 `text.slice(start, end)` 로 바로 자른다. 클라이언트에서 재토큰화하지 않는다.
 - `highlight: true` 인 토큰만 강조한다(레벨 판단은 백엔드 몫).

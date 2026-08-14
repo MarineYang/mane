@@ -60,8 +60,8 @@
     },
 
     /** @returns {Promise<{ok:boolean, expressions?:Array, total?:number, error?:string}>} */
-    async listExpressions() {
-      const res = await send('listExpressions', {});
+    async listExpressions(filters) {
+      const res = await send('listExpressions', filters || {});
       if (!res.ok) return { ok: false, error: res.error };
       return {
         ok: true,

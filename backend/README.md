@@ -80,19 +80,21 @@ DATA_FILE=./data/langflix.json go run ./cmd/api
 
 ```
 POST   /v1/expressions      → 201, 생성된 객체
-GET    /v1/expressions?limit=&offset=  → { expressions: [...], total: n }
+GET    /v1/expressions?limit=&offset=&kind=&from=&to=  → { expressions: [...], total: n }
 DELETE /v1/expressions/:id  → 204 (없으면 404)
 ```
 
 ```json
-// POST 본문 — surface만 필수
+// POST 본문 — surface만 필수, kind는 word(기본값) 또는 sentence
 {
-  "surface": "勉強", "reading": "べんきょう", "gloss": "study", "jlpt": "N5",
+  "kind": "word", "surface": "勉強", "reading": "べんきょう", "gloss": "study", "jlpt": "N5",
   "context": "日本語を勉強しています",
   "source": { "platform": "youtube", "content_id": "abc123",
               "title": "...", "time_sec": 12.5 }
 }
 ```
+
+`from`은 포함, `to`는 미포함하는 RFC3339 시각이다. 클라이언트는 사용자의 현지 날짜 시작과 다음 날 시작을 UTC로 변환해 전달한다. `kind`가 없는 기존 저장 데이터는 `word`로 취급한다.
 `source.platform`은 `youtube` 또는 `netflix` — 확장의 사이트 어댑터와 대응된다.
 
 ### 쉐도잉

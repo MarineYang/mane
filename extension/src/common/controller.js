@@ -203,6 +203,20 @@
     onCloseShadowing() {
       LFJP.shadowing.pause();
     },
+    onSaveSentence(cue, translation) {
+      const meta = adapter.getContentMeta();
+      return LFJP.api.saveExpression({
+        kind: 'sentence',
+        surface: cue.text,
+        gloss: translation || '',
+        source: {
+          platform: meta.platform,
+          content_id: meta.contentId,
+          title: meta.title,
+          time_sec: cue.start
+        }
+      });
+    },
     // 패널에서 저장한 표현의 출처 시각은 "지금 재생 위치" 가 아니라 그 줄의 시각이다.
     onWordClick(token, cue, span, panelEl) {
       openWordTooltip(token, cue.text, span, panelEl, cue.start);

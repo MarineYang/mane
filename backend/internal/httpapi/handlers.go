@@ -371,12 +371,13 @@ func (s *Server) completeShadowingReview(c *gin.Context) {
 // --- expressions ---
 
 type createExpressionRequest struct {
-	Surface string       `json:"surface"`
-	Reading string       `json:"reading"`
-	Gloss   string       `json:"gloss"`
-	JLPT    string       `json:"jlpt"`
-	Context string       `json:"context"`
-	Source  model.Source `json:"source"`
+	Kind    model.ExpressionKind `json:"kind"`
+	Surface string               `json:"surface"`
+	Reading string               `json:"reading"`
+	Gloss   string               `json:"gloss"`
+	JLPT    string               `json:"jlpt"`
+	Context string               `json:"context"`
+	Source  model.Source         `json:"source"`
 }
 
 func (s *Server) createExpression(c *gin.Context) {
@@ -389,9 +390,17 @@ func (s *Server) createExpression(c *gin.Context) {
 		fail(c, http.StatusBadRequest, "surface is required")
 		return
 	}
+	if req.Kind == "" {
+		req.Kind = model.ExpressionKindWord
+	}
+	if !req.Kind.Valid() {
+		fail(c, http.StatusBadRequest, "kind must be word or sentence")
+		return
+	}
 
 	e := &model.Expression{
 		UserID:  userID(c),
+		Kind:    req.Kind,
 		Surface: req.Surface,
 		Reading: req.Reading,
 		Gloss:   req.Gloss,
@@ -416,7 +425,32 @@ func (s *Server) listExpressions(c *gin.Context) {
 		offset = 0
 	}
 
-	items, total, err := s.store.List(c.Request.Context(), userID(c), limit, offset)
+	filter := store.ExpressionFilter{Kind: model.ExpressionKind(c.Query("kind"))}
+	if filter.Kind != "" && !filter.Kind.Valid() {
+		fail(c, http.StatusBadRequest, "kind must be word or sentence")
+		return
+	}
+	var err error
+	if raw := c.Query("from"); raw != "" {
+		filter.From, err = time.Parse(time.RFC3339, raw)
+		if err != nil {
+			fail(c, http.StatusBadRequest, "from must be an RFC3339 timestamp")
+			return
+		}
+	}
+	if raw := c.Query("to"); raw != "" {
+		filter.To, err = time.Parse(time.RFC3339, raw)
+		if err != nil {
+			fail(c, http.StatusBadRequest, "to must be an RFC3339 timestamp")
+			return
+		}
+	}
+	if !filter.From.IsZero() && !filter.To.IsZero() && !filter.From.Before(filter.To) {
+		fail(c, http.StatusBadRequest, "from must be before to")
+		return
+	}
+
+	items, total, err := s.store.List(c.Request.Context(), userID(c), filter, limit, offset)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, err.Error())
 		return

@@ -34,7 +34,7 @@ func TestFileStoreSurvivesRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expressions, total, err := second.List(context.Background(), "u1", 10, 0)
+	expressions, total, err := second.List(context.Background(), "u1", ExpressionFilter{}, 10, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

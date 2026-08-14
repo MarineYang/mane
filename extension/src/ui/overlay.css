@@ -222,7 +222,25 @@
   box-shadow: inset 3px 0 0 #ffd966;
 }
 
-.lfjp-row-time { font-size: 11px; color: rgba(255, 255, 255, 0.45); margin-bottom: 3px; }
+.lfjp-row-top { display: flex; align-items: center; margin-bottom: 3px; }
+.lfjp-row-time { flex: 1; font-size: 11px; color: rgba(255, 255, 255, 0.45); }
+.lfjp-row-bookmark {
+  width: 25px;
+  height: 23px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.52);
+  font: inherit;
+  font-size: 18px;
+  line-height: 23px;
+  cursor: pointer;
+}
+.lfjp-row-bookmark:hover { background: rgba(255, 255, 255, 0.1); color: #ffd966; }
+.lfjp-row-bookmark:disabled { cursor: default; }
+.lfjp-row-bookmark.saved { color: #ffd966; }
+.lfjp-row-bookmark.error { color: #ff8a8a; }
 .lfjp-row-ja { font-size: 15px; line-height: 1.5; }
 .lfjp-row-ko { font-size: 13px; line-height: 1.45; color: #ffd966; margin-top: 3px; }
 
@@ -234,7 +252,7 @@
   color: rgba(255, 255, 255, 0.6);
 }
 
-/* ── 탭 (대사 / 내 단어) ───────────────────────────────────────── */
+/* ── 탭 (대사 / 보관함 / 쉐도잉) ───────────────────────────────── */
 .lfjp-tab {
   padding: 3px 10px;
   border: none;
@@ -249,7 +267,48 @@
 .lfjp-tab:hover { color: #fff; }
 .lfjp-tab.on { background: rgba(255, 255, 255, 0.14); color: #fff; }
 
-/* ── 저장한 단어 ───────────────────────────────────────────────── */
+/* ── 단어·문장 보관함 ──────────────────────────────────────────── */
+.lfjp-saved-controls {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(20, 20, 22, 0.98);
+}
+.lfjp-saved-date-nav,
+.lfjp-saved-kind-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.lfjp-saved-kind-filter { margin-top: 8px; }
+.lfjp-saved-date-nav button,
+.lfjp-saved-kind-filter button,
+.lfjp-saved-date-nav input {
+  height: 28px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+.lfjp-saved-date-nav button,
+.lfjp-saved-kind-filter button { padding: 3px 9px; cursor: pointer; }
+.lfjp-saved-date-nav input { flex: 1; min-width: 120px; padding: 3px 7px; color-scheme: dark; }
+.lfjp-saved-date-nav button:hover,
+.lfjp-saved-kind-filter button:hover { background: rgba(255, 255, 255, 0.12); }
+.lfjp-saved-kind-filter button.on { border-color: #4ea1ff; background: #4ea1ff; color: #07111d; font-weight: 700; }
+.lfjp-saved-date-heading {
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 11px;
+  font-weight: 700;
+}
 .lfjp-word-row {
   padding: 10px 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -260,6 +319,14 @@
 .lfjp-word-head { display: flex; align-items: baseline; gap: 7px; }
 .lfjp-word-surface { font-size: 16px; font-weight: 700; }
 .lfjp-word-reading { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
+.lfjp-word-kind {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(78, 161, 255, 0.16);
+  color: #7ec8ff;
+  font-size: 10px;
+  font-weight: 700;
+}
 
 .lfjp-word-jlpt {
   padding: 1px 6px;

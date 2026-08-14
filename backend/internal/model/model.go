@@ -3,6 +3,17 @@ package model
 
 import "time"
 
+type ExpressionKind string
+
+const (
+	ExpressionKindWord     ExpressionKind = "word"
+	ExpressionKindSentence ExpressionKind = "sentence"
+)
+
+func (k ExpressionKind) Valid() bool {
+	return k == ExpressionKindWord || k == ExpressionKindSentence
+}
+
 // Source records where a saved expression came from. Platform is "youtube" or
 // "netflix" — the two site adapters the extension supports.
 type Source struct {
@@ -12,17 +23,18 @@ type Source struct {
 	TimeSec   float64 `json:"time_sec,omitempty"`
 }
 
-// Expression is a word or phrase the learner saved while watching.
+// Expression is a word or full subtitle sentence the learner saved while watching.
 type Expression struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"user_id"`
-	Surface   string    `json:"surface"`
-	Reading   string    `json:"reading,omitempty"`
-	Gloss     string    `json:"gloss,omitempty"`
-	JLPT      string    `json:"jlpt,omitempty"`
-	Context   string    `json:"context,omitempty"`
-	Source    Source    `json:"source"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
+	Kind      ExpressionKind `json:"kind"`
+	Surface   string         `json:"surface"`
+	Reading   string         `json:"reading,omitempty"`
+	Gloss     string         `json:"gloss,omitempty"`
+	JLPT      string         `json:"jlpt,omitempty"`
+	Context   string         `json:"context,omitempty"`
+	Source    Source         `json:"source"`
+	CreatedAt time.Time      `json:"created_at"`
 }
 
 // Token is one morpheme of an analyzed Japanese sentence.

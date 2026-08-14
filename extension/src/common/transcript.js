@@ -33,6 +33,9 @@
   let userScrolledAt = 0;
   let handlers = {};
   let visible = true;
+  let savedDate = new Date();
+  let savedKind = '';
+  let savedRequest = 0;
 
   function formatTime(sec) {
     const s = Math.max(0, Math.floor(sec || 0));
@@ -40,6 +43,36 @@
     const rest = s % 60;
     if (m < 60) return `${m}:${String(rest).padStart(2, '0')}`;
     return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}:${String(rest).padStart(2, '0')}`;
+  }
+
+  function localDateValue(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function dateFromValue(value) {
+    const parts = String(value || '').split('-').map(Number);
+    if (parts.length !== 3 || parts.some((part) => !Number.isFinite(part))) return null;
+    const date = new Date(parts[0], parts[1] - 1, parts[2]);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function savedDateRange() {
+    const from = new Date(savedDate.getFullYear(), savedDate.getMonth(), savedDate.getDate());
+    const to = new Date(from);
+    to.setDate(to.getDate() + 1);
+    return { from: from.toISOString(), to: to.toISOString() };
+  }
+
+  function formatSavedDate(date) {
+    return new Intl.DateTimeFormat('ko-KR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      weekday: 'short'
+    }).format(date);
   }
 
   function build() {
@@ -56,7 +89,7 @@
 
     tabWordsBtn = document.createElement('button');
     tabWordsBtn.className = 'lfjp-tab';
-    tabWordsBtn.textContent = '내 단어';
+    tabWordsBtn.textContent = '보관함';
     tabWordsBtn.addEventListener('click', () => setTab('words'));
 
     tabShadowBtn = document.createElement('button');
@@ -121,21 +154,25 @@
    * 함께 쌓이므로 캐시해두면 금방 어긋난다.
    */
   async function loadWords() {
+    const request = ++savedRequest;
     wordsEl.textContent = '';
+    const resultsEl = buildSavedControls();
     const loading = document.createElement('div');
     loading.className = 'lfjp-status';
     loading.textContent = '불러오는 중…';
-    wordsEl.appendChild(loading);
+    resultsEl.appendChild(loading);
 
-    const res = await LFJP.api.listExpressions();
-    if (activeTab !== 'words') return; // 그새 탭이 바뀌었다
+    const range = savedDateRange();
+    const res = await LFJP.api.listExpressions({ ...range, kind: savedKind });
+    if (activeTab !== 'words' || request !== savedRequest) return;
 
-    wordsEl.textContent = '';
+    resultsEl.textContent = '';
     if (!res.ok) {
+      countEl.textContent = '';
       const err = document.createElement('div');
       err.className = 'lfjp-status';
       err.textContent = '불러오지 못했습니다: ' + res.error;
-      wordsEl.appendChild(err);
+      resultsEl.appendChild(err);
       return;
     }
 
@@ -143,12 +180,90 @@
     if (!res.expressions.length) {
       const empty = document.createElement('div');
       empty.className = 'lfjp-status';
-      empty.textContent = '아직 저장한 단어가 없습니다. 대사에서 단어를 눌러 저장해보세요.';
-      wordsEl.appendChild(empty);
+      empty.textContent = savedKind === 'sentence'
+        ? '이 날짜에 저장한 문장이 없습니다. 대사의 북마크를 눌러 저장해보세요.'
+        : savedKind === 'word'
+          ? '이 날짜에 저장한 단어가 없습니다. 대사에서 단어를 눌러 저장해보세요.'
+          : '이 날짜에 저장한 단어나 문장이 없습니다.';
+      resultsEl.appendChild(empty);
       return;
     }
 
-    res.expressions.forEach((e) => wordsEl.appendChild(buildWordRow(e)));
+    const groups = new Map();
+    res.expressions.forEach((expression) => {
+      const date = new Date(expression.created_at);
+      const key = Number.isNaN(date.getTime()) ? 'unknown' : localDateValue(date);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(expression);
+    });
+    groups.forEach((expressions, key) => {
+      const heading = document.createElement('div');
+      heading.className = 'lfjp-saved-date-heading';
+      const headingDate = key === 'unknown' ? '저장 날짜 없음' : dateFromValue(key);
+      heading.textContent = headingDate instanceof Date ? formatSavedDate(headingDate) : headingDate;
+      resultsEl.appendChild(heading);
+      expressions.forEach((e) => resultsEl.appendChild(buildWordRow(e)));
+    });
+  }
+
+  function buildSavedControls() {
+    const controls = document.createElement('div');
+    controls.className = 'lfjp-saved-controls';
+
+    const dateRow = document.createElement('div');
+    dateRow.className = 'lfjp-saved-date-nav';
+    const prev = document.createElement('button');
+    prev.textContent = '‹';
+    prev.title = '이전 날짜';
+    prev.addEventListener('click', () => shiftSavedDate(-1));
+    const input = document.createElement('input');
+    input.type = 'date';
+    input.value = localDateValue(savedDate);
+    input.setAttribute('aria-label', '저장 날짜');
+    input.addEventListener('change', () => {
+      const next = dateFromValue(input.value);
+      if (next) {
+        savedDate = next;
+        loadWords();
+      }
+    });
+    const next = document.createElement('button');
+    next.textContent = '›';
+    next.title = '다음 날짜';
+    next.addEventListener('click', () => shiftSavedDate(1));
+    const today = document.createElement('button');
+    today.textContent = '오늘';
+    today.addEventListener('click', () => {
+      savedDate = new Date();
+      loadWords();
+    });
+    dateRow.append(prev, input, next, today);
+
+    const kindRow = document.createElement('div');
+    kindRow.className = 'lfjp-saved-kind-filter';
+    [['', '전체'], ['word', '단어'], ['sentence', '문장']].forEach(([kind, label]) => {
+      const button = document.createElement('button');
+      button.textContent = label;
+      button.classList.toggle('on', savedKind === kind);
+      button.addEventListener('click', () => {
+        savedKind = kind;
+        loadWords();
+      });
+      kindRow.appendChild(button);
+    });
+
+    const results = document.createElement('div');
+    results.className = 'lfjp-saved-results';
+    controls.append(dateRow, kindRow);
+    wordsEl.append(controls, results);
+    return results;
+  }
+
+  function shiftSavedDate(days) {
+    const next = new Date(savedDate);
+    next.setDate(next.getDate() + days);
+    savedDate = next;
+    loadWords();
   }
 
   function buildWordRow(e) {
@@ -162,6 +277,11 @@
     surface.className = 'lfjp-word-surface';
     surface.textContent = e.surface;
     head.appendChild(surface);
+
+    const kind = document.createElement('span');
+    kind.className = 'lfjp-word-kind';
+    kind.textContent = e.kind === 'sentence' ? '문장' : '단어';
+    head.appendChild(kind);
 
     if (e.reading) {
       const reading = document.createElement('span');
@@ -183,7 +303,7 @@
       ev.stopPropagation();
       del.disabled = true;
       const res = await LFJP.api.deleteExpression(e.id);
-      if (res.ok) el.remove();
+      if (res.ok) loadWords();
       else del.disabled = false;
     });
     head.appendChild(del);
@@ -197,7 +317,7 @@
       el.appendChild(gloss);
     }
 
-    if (e.context) {
+    if (e.context && e.context !== e.surface) {
       const ctx = document.createElement('div');
       ctx.className = 'lfjp-word-ctx';
       ctx.textContent = e.context;
@@ -209,8 +329,8 @@
     meta.className = 'lfjp-word-meta';
     const sameVideo = src.content_id && src.content_id === contentId;
     meta.textContent = sameVideo
-      ? `${formatTime(src.time_sec)} · 이 영상`
-      : `${formatTime(src.time_sec)} · ${src.title || src.content_id || '다른 영상'}`;
+      ? `${formatTime(src.time_sec)} · 이 영상 · ${formatSavedTime(e.created_at)}`
+      : `${formatTime(src.time_sec)} · ${src.title || src.content_id || '다른 영상'} · ${formatSavedTime(e.created_at)}`;
     el.appendChild(meta);
 
     // 같은 영상에서 저장한 단어만 장면으로 되돌아갈 수 있다.
@@ -222,6 +342,12 @@
     }
 
     return el;
+  }
+
+  function formatSavedTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '저장 시각 없음';
+    return new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit' }).format(date);
   }
 
   /** 학습 대상 단어가 하나라도 있는 줄인지 — 필터의 기준. */
@@ -266,9 +392,37 @@
       const el = document.createElement('div');
       el.className = 'lfjp-row';
 
+      const top = document.createElement('div');
+      top.className = 'lfjp-row-top';
+
       const time = document.createElement('div');
       time.className = 'lfjp-row-time';
       time.textContent = formatTime(cue.start);
+
+      const bookmark = document.createElement('button');
+      bookmark.className = 'lfjp-row-bookmark';
+      bookmark.textContent = '☆';
+      bookmark.title = '문장 저장';
+      bookmark.setAttribute('aria-label', '문장 저장');
+      bookmark.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        if (!handlers.onSaveSentence || bookmark.disabled) return;
+        bookmark.disabled = true;
+        bookmark.classList.remove('error');
+        bookmark.textContent = '…';
+        const res = await handlers.onSaveSentence(cue, ko.textContent || '');
+        if (res && res.ok) {
+          bookmark.textContent = '★';
+          bookmark.title = '저장됨';
+          bookmark.classList.add('saved');
+        } else {
+          bookmark.textContent = '!';
+          bookmark.title = '저장 실패: ' + ((res && res.error) || '알 수 없는 오류');
+          bookmark.classList.add('error');
+          bookmark.disabled = false;
+        }
+      });
+      top.append(time, bookmark);
 
       const ja = document.createElement('div');
       ja.className = 'lfjp-row-ja';
@@ -277,7 +431,7 @@
       const ko = document.createElement('div');
       ko.className = 'lfjp-row-ko';
 
-      el.append(time, ja, ko);
+      el.append(top, ja, ko);
 
       // 줄 아무 데나 누르면 그 장면으로. 단어 클릭은 자기 선에서 멈추므로 안 섞인다.
       el.addEventListener('click', () => {

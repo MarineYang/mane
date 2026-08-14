@@ -19,8 +19,14 @@ var ErrNotFound = errors.New("item not found")
 
 type ExpressionStore interface {
 	Create(ctx context.Context, e *model.Expression) error
-	List(ctx context.Context, userID string, limit, offset int) ([]model.Expression, int, error)
+	List(ctx context.Context, userID string, filter ExpressionFilter, limit, offset int) ([]model.Expression, int, error)
 	Delete(ctx context.Context, userID, id string) error
+}
+
+type ExpressionFilter struct {
+	Kind model.ExpressionKind
+	From time.Time
+	To   time.Time
 }
 
 type ShadowingStore interface {
@@ -59,17 +65,34 @@ func (s *MemoryStore) Create(_ context.Context, e *model.Expression) error {
 	return nil
 }
 
-func (s *MemoryStore) List(_ context.Context, userID string, limit, offset int) ([]model.Expression, int, error) {
+func (s *MemoryStore) List(_ context.Context, userID string, filter ExpressionFilter, limit, offset int) ([]model.Expression, int, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	all := s.expressions[userID]
-	total := len(all)
+	filtered := make([]model.Expression, 0, len(all))
+	for _, item := range all {
+		// Records written before kind existed are saved words.
+		if item.Kind == "" {
+			item.Kind = model.ExpressionKindWord
+		}
+		if filter.Kind != "" && item.Kind != filter.Kind {
+			continue
+		}
+		if !filter.From.IsZero() && item.CreatedAt.Before(filter.From) {
+			continue
+		}
+		if !filter.To.IsZero() && !item.CreatedAt.Before(filter.To) {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	total := len(filtered)
 
 	// Newest first — the extension saves as you watch, and the app shows the
 	// most recent saves at the top of the library.
 	sorted := make([]model.Expression, total)
-	copy(sorted, all)
+	copy(sorted, filtered)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].CreatedAt.After(sorted[j].CreatedAt) })
 
 	if offset >= total {
