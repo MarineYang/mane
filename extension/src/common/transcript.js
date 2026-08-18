@@ -456,18 +456,18 @@
   /** 형태소 분석이 도착한 줄만 단어 단위로 다시 그린다. */
   function setTokens(index, tokens) {
     const row = rows[index];
-    if (!row || row.analyzed) return;
+    if (!row) return;
     row.tokens = tokens || [];
     row.analyzed = true;
 
+    row.ja.textContent = '';
     if (row.tokens.length) {
-      row.ja.textContent = '';
       row.ja.appendChild(
         LFJP.renderTokens(row.cue.text, row.tokens, (token, span) => {
           if (handlers.onWordClick) handlers.onWordClick(token, row.cue, span, root);
         })
       );
-    }
+    } else row.ja.textContent = row.cue.text;
     if (studyOnly) applyFilter();
   }
 

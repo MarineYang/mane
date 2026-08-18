@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/marineyang/langflix-jp/backend/internal/config"
+	"github.com/marineyang/langflix-jp/backend/internal/dict"
 	"github.com/marineyang/langflix-jp/backend/internal/nlp"
 	"github.com/marineyang/langflix-jp/backend/internal/store"
 	"github.com/marineyang/langflix-jp/backend/internal/translate"
@@ -16,11 +17,12 @@ type Server struct {
 	cfg        config.Config
 	translator *translate.Cached
 	analyzer   nlp.Analyzer
+	dict       *dict.Cached
 	store      store.Store
 }
 
-func New(cfg config.Config, t *translate.Cached, a nlp.Analyzer, s store.Store) *Server {
-	return &Server{cfg: cfg, translator: t, analyzer: a, store: s}
+func New(cfg config.Config, t *translate.Cached, a nlp.Analyzer, d *dict.Cached, s store.Store) *Server {
+	return &Server{cfg: cfg, translator: t, analyzer: a, dict: d, store: s}
 }
 
 func (s *Server) Router() *gin.Engine {
@@ -33,6 +35,7 @@ func (s *Server) Router() *gin.Engine {
 	{
 		v1.POST("/translate", s.translate)
 		v1.POST("/nlp/analyze", s.analyze)
+		v1.POST("/dict/lookup", s.dictLookup)
 		v1.POST("/shadowing/set", s.shadowingSet)
 		v1.POST("/shadowing/attempts", s.createShadowingAttempt)
 		v1.GET("/shadowing/reviews", s.listShadowingReviews)

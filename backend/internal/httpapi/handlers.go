@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/marineyang/langflix-jp/backend/internal/dict"
 	"github.com/marineyang/langflix-jp/backend/internal/model"
 	"github.com/marineyang/langflix-jp/backend/internal/shadowing"
 	"github.com/marineyang/langflix-jp/backend/internal/store"
@@ -27,6 +28,8 @@ func (s *Server) health(c *gin.Context) {
 		"status":     "ok",
 		"translator": s.translator.Name(),
 		"nlp":        s.analyzer.Name(),
+		"dict":       s.dict.Name(),
+		"dict_size":  s.dict.Len(),
 	})
 }
 
@@ -101,6 +104,54 @@ func (s *Server) analyze(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"results": results})
+}
+
+// --- dictionary ---
+
+// maxDictBatch is small on purpose: a lookup is one model call, and the client
+// only ever asks about the words of a single subtitle line.
+const maxDictBatch = 20
+
+type dictRequest struct {
+	SourceLang string         `json:"source_lang"`
+	TargetLang string         `json:"target_lang"`
+	Level      string         `json:"level"`
+	Items      []dict.Request `json:"items"`
+}
+
+func (s *Server) dictLookup(c *gin.Context) {
+	var req dictRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if len(req.Items) == 0 {
+		c.JSON(http.StatusOK, gin.H{"entries": []dict.Entry{}})
+		return
+	}
+	if len(req.Items) > maxDictBatch {
+		fail(c, http.StatusBadRequest, "too many words; max "+strconv.Itoa(maxDictBatch)+" per request")
+		return
+	}
+	for _, item := range req.Items {
+		if strings.TrimSpace(item.Surface) == "" {
+			fail(c, http.StatusBadRequest, "every item needs a surface")
+			return
+		}
+	}
+	if req.SourceLang == "" {
+		req.SourceLang = "ja"
+	}
+	if req.TargetLang == "" {
+		req.TargetLang = "ko"
+	}
+
+	entries, err := s.dict.Lookup(c.Request.Context(), req.SourceLang, req.TargetLang, req.Level, req.Items)
+	if err != nil {
+		fail(c, http.StatusBadGateway, err.Error())
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"entries": entries})
 }
 
 // --- shadowing ---

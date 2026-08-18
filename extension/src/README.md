@@ -10,12 +10,12 @@ PoC(`../poc/`)에서 검증한 cue 취득·싱크 로직을 그대로 이어받�
 
 1. 백엔드를 먼저 띄운다. API 키 없이도 스텁으로 전부 동작한다.
    ```bash
-   cd backend && go run ./cmd/api      # http://localhost:8080
+   cd backend && go run ./cmd/api      # http://localhost:8090
    ```
 2. Chrome 주소창에 `chrome://extensions` → 우측 상단 **개발자 모드** ON
 3. **압축해제된 확장 프로그램을 로드** → 이 폴더(`extension/src`) 선택
 4. 툴바의 확장 아이콘을 눌러 **백엔드 주소**와 **JLPT 레벨**을 확인/저장
-   (기본값 `http://localhost:8080` / `N4`). **연결 확인** 버튼으로 `/healthz` 응답을 볼 수 있다.
+   (기본값 `http://localhost:8090` / `N4`). **연결 확인** 버튼으로 `/healthz` 응답을 볼 수 있다.
 5. **일본어 자막이 있는 유튜브 영상**을 연다.
 
 > 기본값이 아닌 백엔드 주소를 저장하면 저장 시점에 해당 오리진 접근 권한을 묻는다(허용해야 동작).
@@ -31,8 +31,9 @@ PoC(`../poc/`)에서 검증한 cue 취득·싱크 로직을 그대로 이어받�
 | SPA 전환 | 다른 영상으로 이동 시 이전 자막이 남지 않고 새로 로드 |
 | 전체화면 | 전체화면에서도 오버레이·툴팁이 따라감 |
 | 단어 하이라이트 | 일본어 줄의 단어에 hover 하면 반응, 레벨 대상 단어는 파란 밑줄 |
-| 툴팁 | 단어 클릭 → surface/읽기/JLPT/뜻 + `저장` 버튼 |
-| 표현 저장 | `저장` → "저장했습니다 ✓". `curl localhost:8080/v1/expressions` 로 확인 |
+| 툴팁 | 단어 클릭 → 표제어·읽기·품사·JLPT + 이 문장에서의 뜻 + 사전 뜻 목록 + 문맥 설명 + 예문 + `단어장에 저장` |
+| 학습 화면 토글 | 플레이어 우상단 `LF ON/OFF`. 컨트롤바가 사라져도 남아 있고, OFF 하면 넷플릭스 원래 화면으로 완전히 복귀 |
+| 표현 저장 | `저장` → "저장했습니다 ✓". `curl localhost:8090/v1/expressions` 로 확인 |
 | 문장 저장 | 대사 오른쪽 `☆` → `★`. 현재 자막 전체와 번역·영상 시각 저장 |
 | 보관함 | 날짜 이전/다음·달력·오늘 이동, `전체/단어/문장` 필터로 조회 |
 | 문장 반복 | `쉐도잉` 탭 → 세트 만들기 → `원음 듣기`/`구간 반복` |
@@ -41,7 +42,13 @@ PoC(`../poc/`)에서 검증한 cue 취득·싱크 로직을 그대로 이어받�
 | 복습 | 평가한 문장이 1일/3일/7일 뒤 `오늘의 복습`에 노출 |
 | 백엔드 다운 시 | 백엔드를 끄고 새로고침 → 일본어 줄은 계속 나오고 콘솔에 경고만 |
 
+Netflix에서 대상 언어 자막(예: 한국어)이 함께 포착되면 그 공식 자막을 시간 기준으로
+정렬해 번역 줄로 우선 사용한다. 공식 대상 자막이나 백엔드 번역이 없으면 Chrome 138+
+데스크톱의 내장 Translator API를 로컬 폴백으로 사용한다. 첫 사용 시 언어 모델을
+다운로드하므로 번역 표시까지 잠시 걸릴 수 있다.
+
 - **Alt + J** (macOS 는 **Option + J**) : 이중자막 표시 토글
+- **A / S / D** : 이전 자막 / 현재 자막 반복 / 다음 자막
 - 진행 상황은 DevTools 콘솔에 `[langflix-jp]` 로 찍힌다.
 - 서비스 워커 로그는 `chrome://extensions` → 해당 확장의 **서비스 워커** 링크에서 본다.
 
@@ -53,7 +60,7 @@ background.js                  서비스 워커 — 백엔드 호출 전담(tran
 common/
   subtitle-source.js           SubtitleSource 계약 문서 + 어댑터 레지스트리 + 이진 탐색
   api.js                       백엔드 클라이언트(서비스 워커 메시지 래퍼). 실패를 값으로 반환
-  tooltip.js                   단어 툴팁 + 저장 버튼
+  tooltip.js                   단어 툴팁(사전 카드) + 저장 버튼
   overlay.js                   오버레이 렌더러(2줄, 단어 span, 재부착)
   shadowing-practice.js        듣기·오버랩·블라인드 발화·자기평가·복습 UI
   controller.js                진입점 — 어댑터 선택 → cue → 번역 → 분석 → 렌더 루프
@@ -116,12 +123,14 @@ content script 의 fetch 는 확장 host_permissions 가 아니라 페이지 오
 |---|---|
 | cue 로드 직후 | `POST /v1/translate` — `{source_lang:"ja", target_lang:"ko", texts:[...]}`, 500개씩 청크 |
 | 화면에 뜰 cue + 다음 3개 | `POST /v1/nlp/analyze` — `{texts:[...], level:"N4"}`, 80ms 디바운스 배치 |
+| 단어 클릭 | `POST /v1/dict/lookup` — `{items:[{surface, lemma, reading, pos, context}]}`. 문장을 같이 보내야 동음이의어가 갈린다 |
 | 단어·문장 저장 | `POST /v1/expressions` — `{kind, surface, reading, gloss, jlpt, context, source:{platform, content_id, title, time_sec}}` |
 | 날짜별 보관함 | `GET /v1/expressions?from=<RFC3339>&to=<RFC3339>&kind=word|sentence` |
 
 - 토큰의 `start`/`end` 는 **UTF-16 코드 유닛 오프셋**이라 `text.slice(start, end)` 로 바로 자른다. 클라이언트에서 재토큰화하지 않는다.
 - `highlight: true` 인 토큰만 강조한다(레벨 판단은 백엔드 몫).
-- `reading`/`jlpt`/`gloss` 는 NLP 스텁 모드에서 비어 온다 → 해당 행을 그리지 않고 "사전 정보 없음"으로 표시.
+- `reading`/`jlpt` 는 NLP 스텁 모드에서 비어 온다 → 해당 행을 그리지 않는다.
+- 뜻은 형태소 분석이 아니라 `/v1/dict/lookup` 이 준다. 사전이 비어 오면 `/v1/translate` 로 단어 하나를 기계번역해 한 줄만 보여주는 것이 최후 수단이다.
 
 **연결 실패는 자막을 죽이지 않는다.** 번역 실패 → 한국어 줄만 비고, 분석 실패 → 하이라이트만
 없다. 두 경우 모두 콘솔에 경고 1회.

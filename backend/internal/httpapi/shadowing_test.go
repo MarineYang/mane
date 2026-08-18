@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/marineyang/langflix-jp/backend/internal/config"
+	"github.com/marineyang/langflix-jp/backend/internal/dict"
 	"github.com/marineyang/langflix-jp/backend/internal/model"
 	"github.com/marineyang/langflix-jp/backend/internal/nlp"
 	"github.com/marineyang/langflix-jp/backend/internal/store"
@@ -20,6 +21,7 @@ func testRouter() http.Handler {
 		config.Config{AllowedOrigins: []string{"*"}},
 		translate.NewCached(translate.Stub{}),
 		nlp.Stub{},
+		dict.NewCached(dict.Stub{}),
 		store.NewMemory(),
 	).Router()
 }

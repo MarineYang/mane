@@ -24,25 +24,56 @@
   let rafId = null;
   let translateWarned = false;
   let analyzeWarned = false;
+  let learningVisible = true;
+  let activeCueIndex = -1;
+
+  function setLearningVisible(next) {
+    learningVisible = Boolean(next);
+    LFJP.transcript.setVisible(learningVisible);
+    if (!learningVisible) {
+      LFJP.overlay.hide();
+      LFJP.tooltip.close();
+    }
+    if (adapter.updateLearningToggle) adapter.updateLearningToggle(learningVisible);
+  }
+
+  function seekCue(index) {
+    if (!state.cues.length || !adapter.seekTo) return;
+    const next = Math.max(0, Math.min(index, state.cues.length - 1));
+    adapter.seekTo(state.cues[next].start);
+  }
+
+  const previousCue = () => seekCue(activeCueIndex > 0 ? activeCueIndex - 1 : 0);
+  const replayCue = () => seekCue(activeCueIndex >= 0 ? activeCueIndex : 0);
+  const nextCue = () => seekCue(activeCueIndex >= 0 ? activeCueIndex + 1 : 0);
 
   // ---------------------------------------------------------------- 번역
 
-  async function loadTranslations(cues) {
-    const res = await LFJP.api.translate(cues.map((c) => c.text));
-    if (state.cues !== cues) return; // 그 사이 영상이 바뀌었다
-    if (!res.ok) {
-      if (!translateWarned) {
-        translateWarned = true;
-        LFJP.warn(
-          '번역 백엔드에 연결하지 못했습니다. 원문 자막만 표시합니다 — ' + res.error +
-            ' (백엔드가 떠 있는지, 설정의 주소가 맞는지 확인하세요)'
-        );
-      }
-      return;
-    }
-    state.ko = res.targets;
+  async function loadTranslations(cues, provided) {
+    const initial = Array.isArray(provided) ? provided : [];
+    state.ko = cues.map((_, i) => initial[i] || '');
     LFJP.transcript.setTranslations(state.ko);
-    LFJP.log(`번역 완료 — ${res.targets.length}줄`);
+
+    const missing = cues.map((cue, i) => ({ cue, i })).filter(({ i }) => !state.ko[i]);
+    // Chrome 내장 번역은 순차 처리되므로 작은 묶음마다 UI를 갱신한다.
+    const chunkSize = 10;
+    for (let start = 0; start < missing.length; start += chunkSize) {
+      const batch = missing.slice(start, start + chunkSize);
+      const res = await LFJP.api.translate(batch.map(({ cue }) => cue.text));
+      if (state.cues !== cues) return; // 그 사이 영상이 바뀌었다
+      if (!res.ok) {
+        if (!translateWarned) {
+          translateWarned = true;
+          LFJP.warn('번역을 사용할 수 없어 원문만 표시합니다 — ' + res.error);
+        }
+        return;
+      }
+      batch.forEach(({ i }, resultIndex) => {
+        state.ko[i] = (res.targets && res.targets[resultIndex]) || '';
+      });
+      LFJP.transcript.setTranslations(state.ko);
+    }
+    LFJP.log(`번역 완료 — ${state.ko.filter(Boolean).length}/${cues.length}줄`);
   }
 
   // ---------------------------------------------------------------- 형태소 분석
@@ -83,12 +114,13 @@
     if (!res.ok) {
       if (!analyzeWarned) {
         analyzeWarned = true;
-        LFJP.warn('형태소 분석 실패 — 단어 하이라이트 없이 표시합니다: ' + res.error);
+        LFJP.warn('형태소 분석 실패 — 브라우저 단어 분리로 대체합니다: ' + res.error);
       }
-      // 재시도 폭주를 막기 위해 빈 결과로 확정한다(자막 표시에는 영향 없음).
+      // 재시도 폭주를 막되 단어 클릭은 로컬 Segmenter로 계속 제공한다.
       batch.forEach((i) => {
-        state.tokens.set(i, []);
-        LFJP.transcript.setTokens(i, []);
+        const tokens = LFJP.fallbackTokens(cues[i].text);
+        state.tokens.set(i, tokens);
+        LFJP.transcript.setTokens(i, tokens);
       });
       return;
     }
@@ -96,7 +128,9 @@
     // 응답의 results 는 요청한 texts 와 1:1 순서 보존이다.
     batch.forEach((cueIndex, i) => {
       const r = res.results[i];
-      const tokens = (r && r.tokens) || [];
+      const tokens = (r && r.tokens && r.tokens.length)
+        ? r.tokens
+        : LFJP.fallbackTokens(cues[cueIndex].text);
       state.tokens.set(cueIndex, tokens);
       LFJP.transcript.setTokens(cueIndex, tokens);
     });
@@ -113,6 +147,22 @@
     const tick = () => {
       rafId = requestAnimationFrame(tick);
 
+      // 토글이 먼저다. 어댑터는 이 값을 보고 학습용 DOM 을 붙일지 걷을지 정하므로,
+      // 패널·오버레이를 만들기 전에 현재 상태를 알려줘야 OFF 인데 한 프레임 붙었다
+      // 떨어지는 깜빡임이 없다.
+      if (adapter.ensureLearningToggle) {
+        adapter.ensureLearningToggle(learningVisible, () => setLearningVisible(!learningVisible));
+      }
+
+      // OFF 면 학습용 DOM 을 아예 손대지 않는다. 여기서 ensure 를 계속 부르면
+      // 어댑터가 매 프레임 무대 클래스를 다시 붙여, 껐는데도 사이트 레이아웃이
+      // 원래대로 돌아오지 않는다.
+      if (!learningVisible) {
+        LFJP.overlay.hide();
+        if (adapter.getPanelMount) adapter.getPanelMount();
+        return;
+      }
+
       // 패널은 오버레이와 독립이다. 플레이어를 못 찾아 오버레이가 실패해도
       // 대본은 계속 따라가야 한다.
       if (adapter.getPanelMount) LFJP.transcript.ensure(adapter.getPanelMount());
@@ -124,9 +174,11 @@
 
       const idx = LFJP.findCueIndex(state.cues, t);
       if (idx < 0) {
+        activeCueIndex = -1;
         LFJP.overlay.hide();
         return;
       }
+      activeCueIndex = idx;
 
       // 패널을 숨겨둔 동안에도 계속 돈다 — 다시 켰을 때 현재 위치가 맞아 있어야 한다.
       requestAnalysis(idx);
@@ -160,6 +212,7 @@
     state.ko = [];
     state.tokens.clear();
     requested.clear();
+    activeCueIndex = -1;
     queue = [];
     if (flushTimer !== null) clearTimeout(flushTimer);
     flushTimer = null;
@@ -190,7 +243,10 @@
   LFJP.overlay.init({
     onWordClick(token, cueText, span, mountEl) {
       openWordTooltip(token, cueText, span, mountEl, adapter.getCurrentTime() || 0);
-    }
+    },
+    onPrevious: previousCue,
+    onReplay: replayCue,
+    onNext: nextCue
   });
 
   LFJP.transcript.init({
@@ -219,18 +275,31 @@
     },
     // 패널에서 저장한 표현의 출처 시각은 "지금 재생 위치" 가 아니라 그 줄의 시각이다.
     onWordClick(token, cue, span, panelEl) {
-      openWordTooltip(token, cue.text, span, panelEl, cue.start);
+      openWordTooltip(
+        token,
+        cue.text,
+        span,
+        adapter.getMountPoint ? (adapter.getMountPoint() || panelEl) : panelEl,
+        cue.start
+      );
     }
   });
 
   adapter.attach({
-    onCues({ contentId, cues, meta }) {
+    onCues({ contentId, cues, meta, translations }) {
       resetContent('자막을 준비하는 중…');
       state.cues = cues;
       LFJP.transcript.render(cues, contentId);
+      // NLP 응답을 기다리지 않고 모든 대사를 즉시 클릭 가능하게 만든다.
+      // 화면 근처 cue는 이후 Sudachi 결과가 도착하면 읽기·품사 정보로 교체된다.
+      cues.forEach((cue, index) => {
+        const tokens = LFJP.fallbackTokens(cue.text);
+        state.tokens.set(index, tokens);
+        LFJP.transcript.setTokens(index, tokens);
+      });
       if (LFJP.shadowing.available) LFJP.shadowing.available();
       LFJP.log(`자막 로드 완료 — ${cues.length}줄 (${adapter.platform}:${contentId})`, meta || {});
-      loadTranslations(cues);
+      loadTranslations(cues, translations);
     },
     onUnavailable(info) {
       // 어떤 트랙이 있었는지 펼쳐서 보여준다. 배열째로 넘기면 콘솔에서 접혀 있어
@@ -274,10 +343,21 @@
   // 무관하게 동작한다.
   window.addEventListener('keydown', (e) => {
     if (e.altKey && e.code === 'KeyJ') {
-      const next = !LFJP.transcript.isVisible();
-      LFJP.transcript.setVisible(next);
+      const next = !learningVisible;
+      setLearningVisible(next);
       LFJP.log('대사 패널', next ? 'ON' : 'OFF');
+      return;
     }
+
+    const target = e.target;
+    if (!learningVisible || e.altKey || e.ctrlKey || e.metaKey ||
+        (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+    const actions = { KeyA: previousCue, KeyS: replayCue, KeyD: nextCue };
+    const action = actions[e.code];
+    if (!action) return;
+    e.preventDefault();
+    e.stopPropagation();
+    action();
   });
 
   // 자막 밖을 누르면 툴팁을 닫는다.

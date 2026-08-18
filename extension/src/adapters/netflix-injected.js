@@ -15,6 +15,7 @@
     window.postMessage({ __langflix: CHANNEL, type, payload }, '*');
 
   let sourceLang = 'ja';
+  let targetLang = 'ko';
   let currentContentId = contentIdFromLocation();
   const trackCache = new Map();
   const handled = new Set();
@@ -149,6 +150,32 @@
     return out;
   }
 
+  function alignTranslations(sourceCues, targetCues) {
+    const out = [];
+    let cursor = 0;
+    for (const source of sourceCues) {
+      while (cursor < targetCues.length && targetCues[cursor].end <= source.start) cursor++;
+      const parts = [];
+      for (let i = cursor; i < targetCues.length && targetCues[i].start < source.end; i++) {
+        const target = targetCues[i];
+        const overlap = Math.min(source.end, target.end) - Math.max(source.start, target.start);
+        if (overlap > 0.04 && !parts.includes(target.text)) parts.push(target.text);
+      }
+      out.push(parts.join(' '));
+    }
+    return out;
+  }
+
+  function emitCurrentTrack(contentId) {
+    const source = trackCache.get(`${contentId}|${sourceLang}`);
+    if (!source) return;
+    const target = trackCache.get(`${contentId}|${targetLang}`);
+    post('NETFLIX_CUES', {
+      ...source,
+      translations: target ? alignTranslations(source.cues, target.cues) : []
+    });
+  }
+
   function emitTrack(contentId, lang, cues, via) {
     const normalizedLang = normalizeLang(lang);
     if (!contentId || !normalizedLang || !cues.length) return;
@@ -159,8 +186,9 @@
       meta: { lang: normalizedLang, via }
     };
     trackCache.set(`${contentId}|${normalizedLang}`, payload);
-    if (normalizedLang === sourceLang && contentId === contentIdFromLocation()) {
-      post('NETFLIX_CUES', payload);
+    if (contentId === contentIdFromLocation() &&
+        (normalizedLang === sourceLang || normalizedLang === targetLang)) {
+      emitCurrentTrack(contentId);
     }
   }
 
@@ -193,6 +221,21 @@
   function isSubtitleResponse(url, contentType) {
     return /ttml|webvtt|text\/vtt|application\/xml|text\/xml/i.test(contentType || '') ||
       /timedtext|subtitle|\.ttml|\.vtt|\.xml/i.test(url || '');
+  }
+
+  function seekWithNetflixPlayer(seconds) {
+    try {
+      const playerApp = window.netflix && window.netflix.appContext &&
+        window.netflix.appContext.state && window.netflix.appContext.state.playerApp;
+      const videoPlayer = playerApp && playerApp.getAPI && playerApp.getAPI().videoPlayer;
+      const ids = videoPlayer && videoPlayer.getAllPlayerSessionIds &&
+        videoPlayer.getAllPlayerSessionIds();
+      const player = ids && ids.length && videoPlayer.getVideoPlayerBySessionId(ids[0]);
+      if (!player || typeof player.seek !== 'function') throw new Error('Netflix player API를 찾지 못했습니다.');
+      player.seek(Math.max(0, Number(seconds) || 0) * 1000);
+    } catch (err) {
+      post('NETFLIX_SEEK_UNAVAILABLE', { message: String(err && err.message ? err.message : err) });
+    }
   }
 
   const originalFetch = window.fetch;
@@ -233,13 +276,19 @@
 
   window.addEventListener('message', (event) => {
     const data = event.data;
-    if (event.source !== window || !data || data.__langflix !== CHANNEL || data.type !== 'NETFLIX_CONFIG') {
+    if (event.source !== window || !data || data.__langflix !== CHANNEL) {
       return;
     }
+    if (data.type === 'NETFLIX_SEEK') {
+      seekWithNetflixPlayer(data.payload && data.payload.seconds);
+      return;
+    }
+    if (data.type !== 'NETFLIX_CONFIG') return;
     const next = data.payload && data.payload.sourceLang;
+    const nextTarget = data.payload && data.payload.targetLang;
     if (next === 'ja' || next === 'ko') sourceLang = next;
-    const cached = trackCache.get(`${contentIdFromLocation()}|${sourceLang}`);
-    if (cached) post('NETFLIX_CUES', cached);
+    if (nextTarget === 'ja' || nextTarget === 'ko') targetLang = nextTarget;
+    emitCurrentTrack(contentIdFromLocation());
   });
 
   setInterval(() => {
@@ -247,8 +296,7 @@
     if (next === currentContentId) return;
     currentContentId = next;
     post('NETFLIX_NAVIGATE', { contentId: next });
-    const cached = trackCache.get(`${next}|${sourceLang}`);
-    if (cached) post('NETFLIX_CUES', cached);
+    emitCurrentTrack(next);
   }, 500);
 
   debug('Netflix 자막 감시 시작', { sourceLang });

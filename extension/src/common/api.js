@@ -25,6 +25,51 @@
     });
   }
 
+  const localTranslatorCache = new Map();
+
+  async function getLocalTranslator(sourceLanguage, targetLanguage) {
+    if (!('Translator' in self)) return null;
+    const key = `${sourceLanguage}|${targetLanguage}`;
+    if (!localTranslatorCache.has(key)) {
+      const promise = (async () => {
+        const availability = await self.Translator.availability({ sourceLanguage, targetLanguage });
+        if (availability === 'unavailable') return null;
+        return self.Translator.create({
+          sourceLanguage,
+          targetLanguage,
+          monitor(monitor) {
+            monitor.addEventListener('downloadprogress', (event) => {
+              const percent = Math.round(Number(event.loaded || 0) * 100);
+              LFJP.log(`Chrome 로컬 번역 모델 준비 중 — ${percent}%`);
+            });
+          }
+        });
+      })().catch((err) => {
+        localTranslatorCache.delete(key);
+        LFJP.warn('Chrome 로컬 번역을 준비하지 못했습니다:', err.message || String(err));
+        return null;
+      });
+      localTranslatorCache.set(key, promise);
+    }
+    return localTranslatorCache.get(key);
+  }
+
+  async function translateLocally(texts) {
+    const settings = await chrome.storage.sync.get({ sourceLang: 'ja', targetLang: 'ko' });
+    const translator = await getLocalTranslator(settings.sourceLang, settings.targetLang);
+    if (!translator) return null;
+    const targets = [];
+    for (const value of texts || []) {
+      try {
+        targets.push(value ? await translator.translate(value) : '');
+      } catch (err) {
+        LFJP.warn('Chrome 로컬 번역 실패:', err.message || String(err));
+        targets.push('');
+      }
+    }
+    return targets;
+  }
+
   LFJP.api = {
     async settings() {
       const res = await send('settings', {});
@@ -37,8 +82,21 @@
      */
     async translate(texts) {
       const res = await send('translate', { texts });
-      if (!res.ok) return { ok: false, error: res.error };
-      return { ok: true, targets: (res.data && res.data.targets) || [] };
+      const targets = res.ok
+        ? [...((res.data && res.data.targets) || [])]
+        : (texts || []).map(() => '');
+      while (targets.length < (texts || []).length) targets.push('');
+
+      const missing = targets.map((value, i) => value ? -1 : i).filter((i) => i >= 0);
+      if (missing.length) {
+        const local = await translateLocally(missing.map((i) => texts[i]));
+        if (local) missing.forEach((targetIndex, i) => {
+          targets[targetIndex] = local[i] || '';
+        });
+      }
+
+      if (!res.ok && !targets.some(Boolean)) return { ok: false, error: res.error };
+      return { ok: true, targets };
     },
 
     /**
@@ -50,6 +108,21 @@
       const res = await send('analyze', { texts });
       if (!res.ok) return { ok: false, error: res.error };
       return { ok: true, results: (res.data && res.data.results) || [] };
+    },
+
+    /**
+     * 단어 사전 조회. 뜻·읽기·품사·문맥 설명을 한 번에 받는다.
+     *
+     * 백엔드에 API 키가 없으면 senses 가 빈 항목이 돌아온다. 그때는 호출자가
+     * translate 로 폴백해야 하므로 실패로 취급하지 않고 그대로 넘긴다.
+     *
+     * @param {Array<{surface:string, lemma?:string, reading?:string, pos?:string, context?:string}>} items
+     * @returns {Promise<{ok:boolean, entries?:Array, error?:string}>} 입력과 1:1
+     */
+    async dictLookup(items) {
+      const res = await send('dictLookup', { items });
+      if (!res.ok) return { ok: false, error: res.error };
+      return { ok: true, entries: (res.data && res.data.entries) || [] };
     },
 
     /** @returns {Promise<{ok:boolean, expression?:Object, error?:string}>} */

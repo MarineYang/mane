@@ -49,7 +49,9 @@
 
     const once = async () => {
       if (generation !== playGeneration) return;
-      media.currentTime = Math.max(0, sentence.start - 0.08);
+      const start = Math.max(0, sentence.start - 0.08);
+      if (adapter && adapter.seekTo) adapter.seekTo(start);
+      else media.currentTime = start;
       await media.play();
       await new Promise((resolve) => {
         const tick = () => {

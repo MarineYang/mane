@@ -39,6 +39,7 @@
         "common/subtitle-source.js",
         "common/api.js",
         "common/tooltip.js",
+        "common/overlay.js",
         "common/transcript.js",
         "common/shadowing-practice.js",
         "adapters/youtube.js",

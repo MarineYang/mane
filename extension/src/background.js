@@ -3,7 +3,7 @@
  *
  * content script에서 직접 fetch 하지 않는 이유: Chrome 85 이후 content script의
  * fetch는 확장의 host_permissions 가 아니라 "페이지 오리진"의 CORS 규칙을 따른다.
- * 즉 youtube.com 문서에서 localhost:8080 을 부르면 백엔드의 CORS 설정에 인질이 된다.
+ * 즉 youtube.com 문서에서 localhost:8090 을 부르면 백엔드의 CORS 설정에 인질이 된다.
  * 서비스 워커에서 부르면 host_permissions 로 제어할 수 있어 배포 시 백엔드의
  * ALLOWED_ORIGINS 를 좁혀도 확장은 계속 동작한다.
  *
@@ -12,7 +12,7 @@
 'use strict';
 
 const DEFAULTS = {
-  backendUrl: 'http://localhost:8080',
+  backendUrl: 'http://localhost:8090',
   level: 'N4',
   sourceLang: 'ja',
   targetLang: 'ko'
@@ -21,10 +21,24 @@ const DEFAULTS = {
 /** 배치 상한 — 백엔드가 500 초과를 400으로 거절한다. */
 const MAX_BATCH = 500;
 
+/** 사전 조회 상한 — 백엔드가 20 초과를 400으로 거절한다. */
+const MAX_DICT_BATCH = 20;
+
+/**
+ * 기본 포트가 8080 → 8090 으로 바뀌었다.
+ *
+ * 저장된 설정은 기본값보다 우선하므로, 예전 기본값을 그대로 쓰던 사용자는
+ * 아무것도 안 했는데 갑자기 백엔드를 못 찾게 된다. 예전 "기본값"일 때만
+ * 새 기본값으로 읽어준다 — 사용자가 직접 8080 을 고른 경우와 구분할 수 없지만,
+ * 그 경우에도 설정 화면에서 다시 저장하면 그 값이 유지된다.
+ */
+const LEGACY_DEFAULT_BACKEND = 'http://localhost:8080';
+
 async function getSettings() {
   const stored = await chrome.storage.sync.get(DEFAULTS);
+  const backendUrl = String(stored.backendUrl || DEFAULTS.backendUrl).replace(/\/+$/, '');
   return {
-    backendUrl: String(stored.backendUrl || DEFAULTS.backendUrl).replace(/\/+$/, ''),
+    backendUrl: backendUrl === LEGACY_DEFAULT_BACKEND ? DEFAULTS.backendUrl : backendUrl,
     level: stored.level || DEFAULTS.level,
     sourceLang: stored.sourceLang || DEFAULTS.sourceLang,
     targetLang: stored.targetLang || DEFAULTS.targetLang
@@ -104,6 +118,26 @@ const ops = {
       for (const r of json.results || []) results.push(r);
     }
     return { results };
+  },
+
+  /**
+   * 단어 사전 조회. 문장(context)을 함께 보내야 동음이의어가 갈린다.
+   * @param {{items:Array<{surface,lemma,reading,pos,context}>}} payload
+   * @returns {Promise<{entries:Array}>} 입력과 1:1 순서 보존
+   */
+  async dictLookup({ items }) {
+    const { level, sourceLang, targetLang } = await getSettings();
+    const entries = [];
+    for (const part of chunk(items || [], MAX_DICT_BATCH)) {
+      const json = await callBackend('/v1/dict/lookup', {
+        source_lang: sourceLang,
+        target_lang: targetLang,
+        level,
+        items: part
+      });
+      for (const e of (json && json.entries) || []) entries.push(e);
+    }
+    return { entries };
   },
 
   /** @returns {Promise<{expressions:Array, total:number}>} 최신 저장 순 */

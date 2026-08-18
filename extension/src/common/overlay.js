@@ -14,7 +14,25 @@
   let root = null;
   let jaEl = null;
   let koEl = null;
+  let controlsEl = null;
   let onWordClick = null;
+  let onPrevious = null;
+  let onReplay = null;
+  let onNext = null;
+
+  function controlButton(label, shortcut, handler) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'lfjp-cue-control';
+    button.innerHTML = `<span>${label}</span><kbd>${shortcut}</kbd>`;
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const action = handler();
+      if (action) action();
+    });
+    return button;
+  }
 
   // 같은 내용을 매 프레임 다시 그리지 않기 위한 캐시
   let lastKey = null;
@@ -31,7 +49,15 @@
     koEl = document.createElement('div');
     koEl.className = 'lfjp-line lfjp-ko';
 
-    root.append(jaEl, koEl);
+    controlsEl = document.createElement('div');
+    controlsEl.className = 'lfjp-cue-controls';
+    controlsEl.append(
+      controlButton('이전 자막', 'A', () => onPrevious),
+      controlButton('한 번 더', 'S', () => onReplay),
+      controlButton('다음 자막', 'D', () => onNext)
+    );
+
+    root.append(jaEl, koEl, controlsEl);
     lastKey = null;
     lastTokensLen = null;
     lastKo = null;
@@ -103,7 +129,7 @@
   function destroy() {
     LFJP.tooltip.close();
     if (root) root.remove();
-    root = jaEl = koEl = mount = null;
+    root = jaEl = koEl = controlsEl = mount = null;
     lastKey = null;
     lastTokensLen = null;
     lastKo = null;
@@ -112,6 +138,9 @@
   LFJP.overlay = {
     init(opts) {
       onWordClick = opts.onWordClick;
+      onPrevious = opts.onPrevious || null;
+      onReplay = opts.onReplay || null;
+      onNext = opts.onNext || null;
     },
     ensure,
     render,

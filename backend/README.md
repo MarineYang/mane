@@ -6,37 +6,39 @@ Go / Gin. 표현 저장·번역·NLP 프록시와 쉐도잉 문장 선별·자�
 
 ```bash
 cd backend
-go run ./cmd/api          # http://localhost:8080
+go run ./cmd/api          # http://localhost:8090
 ```
 
 **설정 없이 바로 뜬다.** `ANTHROPIC_API_KEY`나 `NLP_SERVICE_URL`이 없으면 스텁 provider로 모든 엔드포인트를 정상 응답한다 — 확장을 API 키 없이도 끝까지 테스트할 수 있게 하려는 의도.
 
 | 환경변수 | 기본값 | 없을 때 동작 |
 |---|---|---|
-| `PORT` | `8080` | |
+| `PORT` | `8090` | |
 | `ALLOWED_ORIGINS` | `*` | 개발용 전체 허용. 배포 전 반드시 지정 |
-| `ANTHROPIC_API_KEY` | — | 번역 줄을 비워두는 스텁 사용 |
-| `ANTHROPIC_MODEL` | `claude-opus-4-8` | |
+| `ANTHROPIC_API_KEY` | — | 번역 줄을 비워두는 스텁 사용. **단어 뜻도 나오지 않는다**(`dict=stub`) |
+| `ANTHROPIC_MODEL` | `claude-opus-5` | 번역과 사전이 함께 쓴다 |
 | `NLP_SERVICE_URL` | — | 형태소 분석 대신 **문자 종류 기반 분절**로 대체(읽기·JLPT·뜻풀이 없음) |
 | `DATA_FILE` | — | 비어 있으면 인메모리. 경로를 주면 표현·복습 기록을 JSON으로 영속 저장 |
+| `DICT_CACHE_FILE` | — | 비어 있으면 사전 캐시가 재시작 때 사라진다(같은 단어를 다시 청구). 경로를 주면 JSON으로 영속 저장 |
 
 로컬 MVP에서 재시작 후에도 기록을 유지하려면 다음처럼 실행한다.
 
 ```bash
-DATA_FILE=./data/langflix.json go run ./cmd/api
+DATA_FILE=./data/langflix.json DICT_CACHE_FILE=./data/dict.json go run ./cmd/api
 ```
 
 파일 저장은 임시 파일 작성·동기화·원자적 이름 변경 순서로 이루어지며 권한은 `0600`이다.
 
 ## API
 
-베이스: `http://localhost:8080`. 사용자 식별은 아직 인증 미구현이라 `X-User-Id` 헤더(없으면 `dev-user`)로 대체한다.
+베이스: `http://localhost:8090`. 사용자 식별은 아직 인증 미구현이라 `X-User-Id` 헤더(없으면 `dev-user`)로 대체한다.
 
 ### `GET /healthz`
 ```json
-{ "status": "ok", "translator": "stub", "nlp": "stub" }
+{ "status": "ok", "translator": "stub", "nlp": "stub", "dict": "stub", "dict_size": 0 }
 ```
-`translator`/`nlp` 값으로 실제 provider가 붙었는지 확인할 수 있다.
+`translator`/`nlp`/`dict` 값으로 실제 provider가 붙었는지 확인할 수 있다. `dict_size`는
+지금까지 캐시에 쌓인 사전 항목 수다.
 
 ### `POST /v1/translate`
 일본어 자막 cue를 한국어로. 배치 전용(최대 500개), 캐시 우선.
@@ -74,7 +76,50 @@ DATA_FILE=./data/langflix.json go run ./cmd/api
 
 **빈 값인 필드는 JSON에서 키 자체가 생략된다**(`omitempty`). 예를 들어 조사 `を` 토큰은 `reading`·`jlpt`·`gloss` 키가 아예 없다. 클라이언트는 `t.reading ?? ""` 처럼 안전하게 접근해야 한다.
 
-`reading`·`jlpt`·`gloss`는 NLP 서비스가 붙어 있을 때만 채워진다. 스텁 모드에서는 `surface`와 오프셋만 반환된다. `gloss`는 사전(JMdict) 연동 전까지 항상 비어 있다.
+`reading`·`jlpt`는 NLP 서비스가 붙어 있을 때만 채워진다. 스텁 모드에서는 `surface`와 오프셋만 반환된다. 형태소 분석기는 뜻을 모르므로 `gloss`는 항상 비어 있다 — 뜻은 아래 `/v1/dict/lookup`이 담당한다.
+
+### `POST /v1/dict/lookup`
+
+단어 하나의 사전 항목. **문장(`context`)을 함께 보내야** 동음이의어가 갈린다 —
+「ぶん」은 그 줄이 무엇이냐에 따라 文/分/이름이 된다.
+
+```json
+// 요청 — 최대 20개
+{
+  "source_lang": "ja", "target_lang": "ko", "level": "N4",
+  "items": [
+    { "surface": "ぶん", "lemma": "ぶん", "reading": "", "pos": "名詞",
+      "context": "ぶんちゃん…" }
+  ]
+}
+
+// 응답 — 입력과 1:1 순서 보존
+{
+  "entries": [{
+    "headword": "ぶん",
+    "reading": "ぶん",
+    "pos": "명사",
+    "jlpt": "N3",
+    "senses": [
+      { "gloss": "글, 문장", "note": "文" },
+      { "gloss": "몫, 분량", "note": "分" }
+    ],
+    "in_context": "이름(애칭)",
+    "context_note": "여기서는 사람 이름 「ぶん」에 친근함을 나타내는 「ちゃん」이 붙은 형태입니다.",
+    "examples": [{ "text": "この文は長い。", "translation": "이 문장은 길다." }],
+    "cached": false
+  }]
+}
+```
+
+`senses`가 빈 항목은 뜻을 만들지 못했다는 뜻이다(스텁 모드 또는 뜻이 없는 기호).
+클라이언트는 그때 `/v1/translate` 로 폴백한다.
+
+**왜 데이터 파일이 아니라 모델인가.** 쓸 만한 공개 한일 사전이 없다 — JMdict는 영어·독일어·
+러시아어는 있어도 한국어가 없고, KANJIDIC2는 한자의 한글 독음만 주며, 국립국어원 다국어
+사전은 표제어가 한국어라 역방향 커버리지가 사실상 없다. 그래서 항목을 모델로 만들고
+영구 캐시한다 — **캐시가 곧 사전이고, 쓸수록 쌓인다.** 같은 단어·같은 문장은 두 번 청구되지
+않으며, `DICT_CACHE_FILE`을 지정하면 재시작해도 살아남는다.
 
 ### 표현 저장
 
@@ -125,6 +170,7 @@ internal/model/     Expression · Token · Analysis
 internal/store/     ExpressionStore 인터페이스 + 인메모리 구현
 internal/translate/ Translator 인터페이스 · Claude 구현 · 스텁 · 캐시 래퍼
 internal/nlp/       Analyzer 인터페이스 · NLP 서비스 프록시 · 문자종류 분절 스텁
+internal/dict/      Provider 인터페이스 · Claude 문맥 사전 · 스텁 · 캐시(+파일 영속)
 internal/httpapi/   라우터 · CORS · 핸들러
 ```
 

@@ -7,7 +7,7 @@
 'use strict';
 
 const DEFAULTS = {
-  backendUrl: 'http://localhost:8080',
+  backendUrl: 'http://localhost:8090',
   level: 'N4',
   sourceLang: 'ja',
   targetLang: 'ko'
@@ -16,7 +16,7 @@ const DEFAULTS = {
 /**
  * manifest 의 host_permissions 에 이미 들어 있는 호스트.
  *
- * 매치 패턴에는 포트를 쓸 수 없고(`http://localhost:8080/*` 는 무효한 패턴이다),
+ * 매치 패턴에는 포트를 쓸 수 없고(`http://localhost:8090/*` 는 무효한 패턴이다),
  * `http://localhost/*` 는 모든 포트에 매칭된다. 그래서 포트가 아니라 호스트로 본다 —
  * 로컬 백엔드는 어느 포트로 띄우든 추가 권한 요청 없이 동작한다.
  */

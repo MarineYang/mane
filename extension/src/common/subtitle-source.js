@@ -80,9 +80,21 @@ LFJP.renderTokens = function (text, tokens, onWordClick) {
 
     if (start > cursor) frag.appendChild(document.createTextNode(text.slice(cursor, start)));
 
-    const span = document.createElement('span');
+    const span = document.createElement(token.reading ? 'ruby' : 'span');
     span.className = 'lfjp-word' + (token.highlight ? ' lfjp-hl' : '');
-    span.textContent = text.slice(start, end);
+
+    const surface = document.createElement('span');
+    surface.className = 'lfjp-word-text';
+    surface.textContent = text.slice(start, end);
+    span.appendChild(surface);
+
+    if (token.reading) {
+      const reading = document.createElement('rt');
+      reading.className = 'lfjp-word-reading-inline';
+      reading.textContent = token.reading;
+      span.appendChild(reading);
+    }
+
     span.addEventListener('click', (ev) => {
       ev.stopPropagation();
       if (onWordClick) onWordClick(token, span);
@@ -93,6 +105,35 @@ LFJP.renderTokens = function (text, tokens, onWordClick) {
 
   if (cursor < text.length) frag.appendChild(document.createTextNode(text.slice(cursor)));
   return frag;
+};
+
+/**
+ * NLP 서비스가 없을 때 사용하는 브라우저 내 단어 분리 폴백.
+ * Intl.Segmenter는 읽기·품사·JLPT는 주지 않지만 일본어 단어 경계와 UTF-16
+ * 인덱스를 제공하므로 클릭→로컬 번역 흐름은 계속 살릴 수 있다.
+ */
+let fallbackSegmenter = null;
+LFJP.fallbackTokens = function (text) {
+  if (!text || typeof Intl === 'undefined' || typeof Intl.Segmenter !== 'function') return [];
+  try {
+    fallbackSegmenter = fallbackSegmenter || new Intl.Segmenter('ja', { granularity: 'word' });
+    return Array.from(fallbackSegmenter.segment(text))
+      .filter((part) => part.isWordLike && /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(part.segment))
+      .map((part) => ({
+        surface: part.segment,
+        lemma: part.segment,
+        reading: '',
+        pos: '',
+        jlpt: '',
+        gloss: '',
+        start: part.index,
+        end: part.index + part.segment.length,
+        highlight: true,
+        fallback: true
+      }));
+  } catch (_) {
+    return [];
+  }
 };
 
 /** @param {SubtitleSource} adapter */

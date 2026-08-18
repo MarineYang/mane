@@ -19,17 +19,19 @@ type Config struct {
 	Model           string
 	NLPServiceURL   string
 	DataFile        string
+	DictCacheFile   string
 	HTTPTimeout     time.Duration
 }
 
 func Load() Config {
 	return Config{
-		Port:            env("PORT", "8080"),
+		Port:            env("PORT", "8090"),
 		AllowedOrigins:  splitCSV(env("ALLOWED_ORIGINS", "*")),
 		AnthropicAPIKey: env("ANTHROPIC_API_KEY", ""),
-		Model:           env("ANTHROPIC_MODEL", "claude-opus-4-8"),
+		Model:           env("ANTHROPIC_MODEL", "claude-opus-5"),
 		NLPServiceURL:   env("NLP_SERVICE_URL", ""),
 		DataFile:        env("DATA_FILE", ""),
+		DictCacheFile:   env("DICT_CACHE_FILE", ""),
 		HTTPTimeout:     60 * time.Second,
 	}
 }
