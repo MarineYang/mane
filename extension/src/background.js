@@ -32,13 +32,27 @@ const MAX_DICT_BATCH = 20;
  * 새 기본값으로 읽어준다 — 사용자가 직접 8080 을 고른 경우와 구분할 수 없지만,
  * 그 경우에도 설정 화면에서 다시 저장하면 그 값이 유지된다.
  */
-const LEGACY_DEFAULT_BACKEND = 'http://localhost:8080';
+const LEGACY_LOCAL_BACKENDS = new Set([
+  'http://localhost:8080',
+  'http://localhost:8081',
+  'http://localhost:8099',
+  'http://127.0.0.1:8080',
+  'http://127.0.0.1:8081',
+  'http://127.0.0.1:8099'
+]);
 
 async function getSettings() {
   const stored = await chrome.storage.sync.get(DEFAULTS);
-  const backendUrl = String(stored.backendUrl || DEFAULTS.backendUrl).replace(/\/+$/, '');
+  const savedBackendUrl = String(stored.backendUrl || DEFAULTS.backendUrl).replace(/\/+$/, '');
+  const backendUrl = LEGACY_LOCAL_BACKENDS.has(savedBackendUrl)
+    ? DEFAULTS.backendUrl
+    : savedBackendUrl;
+  if (backendUrl !== savedBackendUrl) {
+    // 한 번 바꾼 뒤에는 팝업에도 새 주소가 보이고 다음 호출부터 비교가 필요 없다.
+    chrome.storage.sync.set({ backendUrl }).catch(() => {});
+  }
   return {
-    backendUrl: backendUrl === LEGACY_DEFAULT_BACKEND ? DEFAULTS.backendUrl : backendUrl,
+    backendUrl,
     level: stored.level || DEFAULTS.level,
     sourceLang: stored.sourceLang || DEFAULTS.sourceLang,
     targetLang: stored.targetLang || DEFAULTS.targetLang
@@ -80,6 +94,45 @@ function chunk(arr, size) {
   return out;
 }
 
+let creatingOffscreen = null;
+
+async function ensureOffscreenDocument() {
+  if (!chrome.offscreen) throw new Error('이 Chrome에서는 오프스크린 번역을 지원하지 않습니다.');
+  if (await chrome.offscreen.hasDocument()) return;
+  if (!creatingOffscreen) {
+    creatingOffscreen = chrome.offscreen.createDocument({
+      url: 'offscreen.html',
+      reasons: ['DOM_PARSER'],
+      justification: 'Chrome Translator API는 문서 컨텍스트가 필요합니다.'
+    }).finally(() => {
+      creatingOffscreen = null;
+    });
+  }
+  await creatingOffscreen;
+}
+
+async function callOffscreenTranslate(texts, sourceLanguage, targetLanguage) {
+  await ensureOffscreenDocument();
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage({
+      type: 'LFJP_OFFSCREEN_TRANSLATE',
+      texts,
+      sourceLanguage,
+      targetLanguage
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      if (!response || !response.ok) {
+        reject(new Error((response && response.error) || '로컬 번역 응답이 없습니다.'));
+        return;
+      }
+      resolve({ targets: response.targets || [] });
+    });
+  });
+}
+
 const ops = {
   async settings() {
     return getSettings();
@@ -101,6 +154,11 @@ const ops = {
       for (const t of json.translations || []) targets.push(t.target || '');
     }
     return { targets };
+  },
+
+  async localTranslate({ texts }) {
+    const { sourceLang, targetLang } = await getSettings();
+    return callOffscreenTranslate(texts || [], sourceLang, targetLang);
   },
 
   /**

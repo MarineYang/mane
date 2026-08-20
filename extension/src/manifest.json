@@ -3,7 +3,7 @@
   "name": "langflix — 한일 쉐도잉",
   "version": "0.4.0",
   "description": "유튜브·Netflix 한일 이중자막, 구간 반복, 무마이크 쉐도잉과 복습.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "offscreen"],
   "host_permissions": [
     "http://localhost/*",
     "http://127.0.0.1/*"

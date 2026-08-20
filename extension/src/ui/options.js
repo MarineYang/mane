@@ -21,6 +21,10 @@ const DEFAULTS = {
  * 로컬 백엔드는 어느 포트로 띄우든 추가 권한 요청 없이 동작한다.
  */
 const BUILTIN_HOSTS = ['localhost', '127.0.0.1'];
+const LEGACY_LOCAL_BACKENDS = new Set([
+  'http://localhost:8080', 'http://localhost:8081', 'http://localhost:8099',
+  'http://127.0.0.1:8080', 'http://127.0.0.1:8081', 'http://127.0.0.1:8099'
+]);
 
 function isBuiltin(url) {
   return url.protocol === 'http:' && BUILTIN_HOSTS.includes(url.hostname);
@@ -39,7 +43,10 @@ function normalize(url) {
 }
 
 chrome.storage.sync.get(DEFAULTS).then((s) => {
-  $('backendUrl').value = s.backendUrl;
+  const saved = normalize(s.backendUrl);
+  const backendUrl = LEGACY_LOCAL_BACKENDS.has(saved) ? DEFAULTS.backendUrl : saved;
+  $('backendUrl').value = backendUrl;
+  if (backendUrl !== saved) chrome.storage.sync.set({ backendUrl }).catch(() => {});
   $('level').value = s.level;
   $('direction').value = `${s.sourceLang}-${s.targetLang}`;
 });

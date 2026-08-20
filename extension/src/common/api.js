@@ -25,49 +25,13 @@
     });
   }
 
-  const localTranslatorCache = new Map();
-
-  async function getLocalTranslator(sourceLanguage, targetLanguage) {
-    if (!('Translator' in self)) return null;
-    const key = `${sourceLanguage}|${targetLanguage}`;
-    if (!localTranslatorCache.has(key)) {
-      const promise = (async () => {
-        const availability = await self.Translator.availability({ sourceLanguage, targetLanguage });
-        if (availability === 'unavailable') return null;
-        return self.Translator.create({
-          sourceLanguage,
-          targetLanguage,
-          monitor(monitor) {
-            monitor.addEventListener('downloadprogress', (event) => {
-              const percent = Math.round(Number(event.loaded || 0) * 100);
-              LFJP.log(`Chrome 로컬 번역 모델 준비 중 — ${percent}%`);
-            });
-          }
-        });
-      })().catch((err) => {
-        localTranslatorCache.delete(key);
-        LFJP.warn('Chrome 로컬 번역을 준비하지 못했습니다:', err.message || String(err));
-        return null;
-      });
-      localTranslatorCache.set(key, promise);
-    }
-    return localTranslatorCache.get(key);
-  }
-
   async function translateLocally(texts) {
-    const settings = await chrome.storage.sync.get({ sourceLang: 'ja', targetLang: 'ko' });
-    const translator = await getLocalTranslator(settings.sourceLang, settings.targetLang);
-    if (!translator) return null;
-    const targets = [];
-    for (const value of texts || []) {
-      try {
-        targets.push(value ? await translator.translate(value) : '');
-      } catch (err) {
-        LFJP.warn('Chrome 로컬 번역 실패:', err.message || String(err));
-        targets.push('');
-      }
+    const res = await send('localTranslate', { texts });
+    if (!res.ok) {
+      LFJP.warn('Chrome 로컬 번역 실패:', res.error);
+      return null;
     }
-    return targets;
+    return (res.data && res.data.targets) || [];
   }
 
   LFJP.api = {

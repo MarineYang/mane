@@ -26,12 +26,20 @@ import (
 func main() {
 	cfg := config.Load()
 
+	// Translation and the dictionary always run on the same provider — a learner
+	// reading a Korean line and then tapping a word in it should not get two
+	// different models' idea of what the sentence means.
+	provider := cfg.ResolveProvider()
+
 	var base translate.Translator
-	if cfg.AnthropicAPIKey != "" {
+	switch provider {
+	case config.ProviderAnthropic:
 		base = translate.NewClaude(cfg.AnthropicAPIKey, cfg.Model)
-	} else {
+	case config.ProviderOpenAI:
+		base = translate.NewOpenAI(cfg.OpenAIAPIKey, cfg.OpenAIModel, cfg.OpenAIBaseURL, cfg.HTTPTimeout)
+	default:
 		base = translate.Stub{}
-		log.Println("ANTHROPIC_API_KEY not set — serving stub translations")
+		log.Println("no ANTHROPIC_API_KEY or OPENAI_API_KEY — serving stub translations (보조 자막 줄이 빈 채로 나온다)")
 	}
 	translator := translate.NewCached(base)
 
@@ -39,11 +47,14 @@ func main() {
 	// produce once and are free forever after, so persisting it is what keeps
 	// word lookups cheap across restarts.
 	var dictBase dict.Provider
-	if cfg.AnthropicAPIKey != "" {
+	switch provider {
+	case config.ProviderAnthropic:
 		dictBase = dict.NewClaude(cfg.AnthropicAPIKey, cfg.Model)
-	} else {
+	case config.ProviderOpenAI:
+		dictBase = dict.NewOpenAI(cfg.OpenAIAPIKey, cfg.OpenAIModel, cfg.OpenAIBaseURL, cfg.HTTPTimeout)
+	default:
 		dictBase = dict.Stub{}
-		log.Println("ANTHROPIC_API_KEY not set — word meanings unavailable (dict=stub)")
+		log.Println("no ANTHROPIC_API_KEY or OPENAI_API_KEY — word meanings unavailable (dict=stub)")
 	}
 	dictionary := dict.NewCached(dictBase)
 	if cfg.DictCacheFile != "" {

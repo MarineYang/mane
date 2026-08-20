@@ -192,7 +192,7 @@
     }
   }
 
-  function handleSubtitle(url, body, via) {
+  function handleSubtitle(url, body, via, forcedLang) {
     const raw = String(body || '').trim();
     if (!raw || (!raw.startsWith('<') && !raw.startsWith('WEBVTT'))) return;
     const contentId = contentIdFromLocation();
@@ -205,7 +205,7 @@
       handled.add(signature);
       // 일부 Netflix TTML은 언어 메타데이터를 생략한다. 이 경우 사용자가
       // 플레이어에서 학습 언어 자막을 선택했다는 전제로 현재 설정을 사용한다.
-      const lang = parsed.lang || sourceLang;
+      const lang = normalizeLang(forcedLang) || parsed.lang || sourceLang;
       emitTrack(contentId, lang, parsed.cues, via);
       debug('자막 응답 포착', {
         contentId,
@@ -221,6 +221,106 @@
   function isSubtitleResponse(url, contentType) {
     return /ttml|webvtt|text\/vtt|application\/xml|text\/xml/i.test(contentType || '') ||
       /timedtext|subtitle|\.ttml|\.vtt|\.xml/i.test(url || '');
+  }
+
+  function isManifestResponse(url, contentType) {
+    // 일부 Netflix 클라이언트는 매니페스트를 JSON이 아닌 일반 바이너리/빈
+    // Content-Type으로 표시한다. URL이 매니페스트임이 분명하면 본문을 한 번
+    // JSON으로 시도하고, 실패는 discoverSubtitleTracks가 조용히 무시한다.
+    return /manifest|playapi/i.test(url || '');
+  }
+
+  function firstDownloadURL(value, seen, depth) {
+    if (depth > 8 || value === null || value === undefined) return '';
+    if (typeof value === 'string') {
+      // downloadableId 같은 일반 문자열을 현재 페이지 기준 상대 URL로 오인하지
+      // 않는다. Netflix 자막 CDN 주소는 절대 URL 또는 // 형태다.
+      if (!/^(?:https?:)?\/\//i.test(value)) return '';
+      try {
+        const url = new URL(value, location.href);
+        return /^https?:$/.test(url.protocol) ? url.href : '';
+      } catch (_) {
+        return '';
+      }
+    }
+    if (typeof value !== 'object') return '';
+    if (seen.has(value)) return '';
+    seen.add(value);
+
+    // 최신 응답은 urls: [{url: "..."}] 형태, 기존 응답은
+    // downloadUrls: {id: "..."} 형태다. 명시적인 URL 필드를 먼저 본다.
+    for (const key of ['url', 'downloadUrl', 'downloadURL']) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        const found = firstDownloadURL(value[key], seen, depth + 1);
+        if (found) return found;
+      }
+    }
+    for (const child of Object.values(value)) {
+      const found = firstDownloadURL(child, seen, depth + 1);
+      if (found) return found;
+    }
+    return '';
+  }
+
+  function downloadableURL(track) {
+    const root = track && (track.ttDownloadables || track.downloadables);
+    if (!root || typeof root !== 'object') return '';
+    const preferred = ['webvtt-lssdh-ios8', 'dfxp-ls-sdh', 'simplesdh'];
+    const profiles = [
+      ...preferred.map((name) => root[name]).filter(Boolean),
+      ...Object.values(root)
+    ];
+    for (const profile of profiles) {
+      const urls = profile && (profile.downloadUrls || profile.urls || profile);
+      const found = firstDownloadURL(urls, new Set(), 0);
+      if (found) return found;
+    }
+    return '';
+  }
+
+  function discoverSubtitleTracks(raw, via) {
+    let json;
+    try {
+      json = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (_) {
+      return;
+    }
+
+    const found = [];
+    const visit = (node, depth) => {
+      if (!node || depth > 14) return;
+      if (Array.isArray(node)) {
+        node.forEach((value) => visit(value, depth + 1));
+        return;
+      }
+      if (typeof node !== 'object') return;
+      for (const [key, value] of Object.entries(node)) {
+        if (/^(timedtexttracks|texttracks)$/i.test(key) && Array.isArray(value)) {
+          value.forEach((track) => found.push(track));
+        } else {
+          visit(value, depth + 1);
+        }
+      }
+    };
+    visit(json, 0);
+
+    const contentId = contentIdFromLocation();
+    found.forEach((track) => {
+      if (!track || track.isNoneTrack) return;
+      const lang = normalizeLang(
+        track.language || track.bcp47 || track.languageCode || track.lang || track.locale
+      );
+      if (lang !== sourceLang && lang !== targetLang) return;
+      const url = downloadableURL(track);
+      if (!url) return;
+      const signature = `manifest-track|${contentId}|${lang}|${url}`;
+      if (handled.has(signature)) return;
+      handled.add(signature);
+      originalFetch(url)
+        .then((response) => response.text())
+        .then((body) => handleSubtitle(url, body, `${via}:manifest`, lang))
+        .catch(() => {});
+    });
   }
 
   function seekWithNetflixPlayer(seconds) {
@@ -245,6 +345,9 @@
       try {
         const url = response.url || String(args[0] || '');
         const contentType = response.headers.get('content-type') || '';
+        if (isManifestResponse(url, contentType)) {
+          response.clone().text().then((body) => discoverSubtitleTracks(body, 'fetch')).catch(() => {});
+        }
         if (!isSubtitleResponse(url, contentType)) return;
         response.clone().text().then((body) => handleSubtitle(url, body, 'fetch')).catch(() => {});
       } catch (_) {
@@ -264,6 +367,10 @@
     this.addEventListener('load', () => {
       try {
         const contentType = this.getResponseHeader('content-type') || '';
+        if (isManifestResponse(this.__lfjpNetflixURL, contentType)) {
+          const body = this.responseType === 'json' ? this.response : this.responseText;
+          discoverSubtitleTracks(body, 'xhr');
+        }
         if (!isSubtitleResponse(this.__lfjpNetflixURL, contentType)) return;
         if (this.responseType && this.responseType !== 'text') return;
         handleSubtitle(this.__lfjpNetflixURL, this.responseText, 'xhr');

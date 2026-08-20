@@ -54,6 +54,15 @@
     state.ko = cues.map((_, i) => initial[i] || '');
     LFJP.transcript.setTranslations(state.ko);
 
+    // Netflix에서는 서비스가 제공하는 공식 한국어 트랙을 일본어 cue와 시간으로
+    // 맞춘 값만 쓴다. 아직 한국어 트랙 다운로드가 끝나지 않았다면 다음
+    // NETFLIX_CUES 이벤트가 이 배열을 갱신한다. 그 사이 AI 번역으로 채우면 공식
+    // 자막과 섞이거나 뒤늦게 도착한 트랙을 덮어쓸 수 있다.
+    if (adapter.platform === 'netflix') {
+      LFJP.log(`Netflix 한국어 자막 — ${state.ko.filter(Boolean).length}/${cues.length}줄`);
+      return;
+    }
+
     const missing = cues.map((cue, i) => ({ cue, i })).filter(({ i }) => !state.ko[i]);
     // Chrome 내장 번역은 순차 처리되므로 작은 묶음마다 UI를 갱신한다.
     const chunkSize = 10;
