@@ -56,6 +56,10 @@
       });
       return;
     }
+    if (data.type === 'NETFLIX_UNAVAILABLE') {
+      handlers.onUnavailable({ available: payload.available || [] });
+      return;
+    }
     if (data.type === 'NETFLIX_ERROR') {
       handlers.onError({ message: payload.message || 'Netflix 자막 취득 실패' });
       return;
@@ -185,6 +189,9 @@
       if (root) root.classList.add('lfjp-netflix-learning-player');
     } else {
       restoreNativeStage(root);
+      // 학습 언어 트랙은 우리가 대신 골라둔 것이다. 끌 때 사용자의 원래 선택으로
+      // 돌려놓지 않으면 넷플릭스 자막이 일본어인 채로 남는다.
+      window.postMessage({ __langflix: LFJP.CHANNEL, type: 'NETFLIX_RESTORE_TRACK' }, '*');
     }
   }
 
@@ -213,6 +220,7 @@
 
     detach() {
       handlers = null;
+      window.postMessage({ __langflix: LFJP.CHANNEL, type: 'NETFLIX_RESTORE_TRACK' }, '*');
       window.removeEventListener('message', onWindowMessage);
       if (panelMount) panelMount.remove();
       if (learningToggle) learningToggle.remove();

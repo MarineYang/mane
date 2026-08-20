@@ -613,6 +613,13 @@
   border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+/* 학습 화면에서는 넷플릭스 자체 자막을 감춘다.
+   학습 언어 트랙을 우리가 대신 골라두기 때문에, 그대로 두면 화면 한가운데 원문이
+   한 번 더 뜬다. 원문·번역 두 줄은 아래 오버레이가 전담한다. */
+.lfjp-netflix-learning-player .player-timedtext {
+  display: none !important;
+}
+
 .lfjp-netflix-learning-player .lfjp-line {
   margin: 0 auto;
   background: transparent;

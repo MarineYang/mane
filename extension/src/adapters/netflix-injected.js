@@ -20,6 +20,13 @@
   const trackCache = new Map();
   const handled = new Set();
 
+  // 자막 트랙 자동 선택용 상태. originalTrack 은 학습 화면을 끌 때 되돌릴 사용자의
+  // 원래 선택이다.
+  let originalTrack = null;
+  let switchedTrack = false;
+  let trackScans = 0;
+  let reportedUnavailable = false;
+
   function debug(msg, data) {
     post('NETFLIX_DEBUG', { msg, data });
   }
@@ -323,18 +330,120 @@
     });
   }
 
-  function seekWithNetflixPlayer(seconds) {
+  /** 현재 재생 세션의 Netflix 플레이어. 아직 준비 전이면 null. */
+  function netflixPlayer() {
     try {
       const playerApp = window.netflix && window.netflix.appContext &&
         window.netflix.appContext.state && window.netflix.appContext.state.playerApp;
       const videoPlayer = playerApp && playerApp.getAPI && playerApp.getAPI().videoPlayer;
       const ids = videoPlayer && videoPlayer.getAllPlayerSessionIds &&
         videoPlayer.getAllPlayerSessionIds();
-      const player = ids && ids.length && videoPlayer.getVideoPlayerBySessionId(ids[0]);
+      if (!ids || !ids.length) return null;
+      return videoPlayer.getVideoPlayerBySessionId(ids[0]) || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function seekWithNetflixPlayer(seconds) {
+    try {
+      const player = netflixPlayer();
       if (!player || typeof player.seek !== 'function') throw new Error('Netflix player API를 찾지 못했습니다.');
       player.seek(Math.max(0, Number(seconds) || 0) * 1000);
     } catch (err) {
       post('NETFLIX_SEEK_UNAVAILABLE', { message: String(err && err.message ? err.message : err) });
+    }
+  }
+
+  // ── 학습 언어 트랙 확보 ─────────────────────────────────────────────
+  //
+  // Netflix 는 "지금 선택된" 자막만 내려받는다. 사용자가 한국어를 켜두면 일본어
+  // 트랙은 네트워크에 아예 뜨지 않으므로, 응답을 가로채는 것만으로는 영원히 잡을 수
+  // 없다 — 매번 플레이어에서 일본어를 직접 골라야 했던 이유다.
+  //
+  // 그래서 플레이어의 트랙 목록을 직접 읽는다. 트랙 객체가 다운로드 주소를 들고
+  // 있으면 그것만 받아오고(사용자의 자막 선택을 건드리지 않는다), 없으면 그 트랙을
+  // 대신 골라 Netflix 가 내려받게 한다. 원래 선택은 기억해 두었다가 학습 화면을 끌
+  // 때 되돌린다.
+
+  function trackLang(track) {
+    return normalizeLang(
+      track && (track.bcp47 || track.language || track.languageCode || track.lang || track.locale)
+    );
+  }
+
+  function listTracks(player) {
+    try {
+      const tracks = player.getTimedTextTrackList && player.getTimedTextTrackList();
+      return Array.isArray(tracks) ? tracks.filter((track) => track && !track.isNoneTrack) : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function ensureSourceTrack() {
+    const contentId = contentIdFromLocation();
+    if (!contentId) return;
+    if (trackCache.has(`${contentId}|${sourceLang}`)) return; // 이미 확보했다
+
+    const player = netflixPlayer();
+    if (!player) return;
+    const tracks = listTracks(player);
+    if (!tracks.length) return;
+
+    const wanted = tracks.find((track) => trackLang(track) === sourceLang);
+    if (!wanted) {
+      // 트랙 목록은 읽혔는데 학습 언어가 없다. 다만 목록은 재생 시작 직후 일부만
+      // 채워져 있을 수 있어, 몇 초 지켜본 뒤에야 "없다"고 단정한다 — 잘못 알리면
+      // 공통 레이어가 대사를 지워버린다.
+      if (!reportedUnavailable && trackScans > 10) {
+        reportedUnavailable = true;
+        post('NETFLIX_UNAVAILABLE', {
+          contentId,
+          available: Array.from(new Set(tracks.map(trackLang).filter(Boolean)))
+        });
+      }
+      return;
+    }
+
+    // 사용자의 선택을 건드리지 않는 길이 있으면 그쪽이 먼저다.
+    const url = downloadableURL(wanted);
+    if (url) {
+      const signature = `player-track|${contentId}|${sourceLang}|${url}`;
+      if (handled.has(signature)) return;
+      handled.add(signature);
+      originalFetch(url)
+        .then((response) => response.text())
+        .then((body) => handleSubtitle(url, body, 'player:downloadable', sourceLang))
+        .catch(() => {});
+      return;
+    }
+
+    if (switchedTrack) return;
+    try {
+      originalTrack = player.getTimedTextTrack ? player.getTimedTextTrack() : null;
+      player.setTimedTextTrack(wanted);
+      switchedTrack = true;
+      debug('학습 언어 자막 트랙을 대신 선택했다', {
+        contentId,
+        lang: sourceLang,
+        restoreTo: trackLang(originalTrack) || 'off'
+      });
+    } catch (err) {
+      post('NETFLIX_ERROR', { message: '자막 트랙 선택 실패: ' + String(err) });
+    }
+  }
+
+  /** 학습 화면을 끌 때 사용자의 원래 자막 선택으로 되돌린다. */
+  function restoreOriginalTrack() {
+    if (!switchedTrack) return;
+    switchedTrack = false;
+    const player = netflixPlayer();
+    if (!player || !player.setTimedTextTrack) return;
+    try {
+      if (originalTrack) player.setTimedTextTrack(originalTrack);
+    } catch (_) {
+      /* 트랙이 사라졌거나 플레이어가 교체됐다 — 되돌릴 대상이 없다 */
     }
   }
 
@@ -390,6 +499,10 @@
       seekWithNetflixPlayer(data.payload && data.payload.seconds);
       return;
     }
+    if (data.type === 'NETFLIX_RESTORE_TRACK') {
+      restoreOriginalTrack();
+      return;
+    }
     if (data.type !== 'NETFLIX_CONFIG') return;
     const next = data.payload && data.payload.sourceLang;
     const nextTarget = data.payload && data.payload.targetLang;
@@ -400,10 +513,22 @@
 
   setInterval(() => {
     const next = contentIdFromLocation();
-    if (next === currentContentId) return;
-    currentContentId = next;
-    post('NETFLIX_NAVIGATE', { contentId: next });
-    emitCurrentTrack(next);
+    if (next !== currentContentId) {
+      currentContentId = next;
+      originalTrack = null;
+      switchedTrack = false;
+      trackScans = 0;
+      reportedUnavailable = false;
+      post('NETFLIX_NAVIGATE', { contentId: next });
+      emitCurrentTrack(next);
+    }
+
+    // 플레이어와 트랙 목록은 재생 시작보다 늦게 준비될 수 있어 잠시 지켜본다.
+    // 확보하면 ensureSourceTrack 이 스스로 빠져나오므로 상한만 둔다(약 60초).
+    if (trackScans < 120) {
+      trackScans++;
+      ensureSourceTrack();
+    }
   }, 500);
 
   debug('Netflix 자막 감시 시작', { sourceLang });
