@@ -49,26 +49,52 @@
 
   // ---------------------------------------------------------------- 번역
 
+  // 첫 묶음은 작게 — 지금 화면에 뜰 줄의 한국어가 최대한 빨리 나와야 한다.
+  // 그다음부터는 크게 — 한 화가 수백 줄이라 10줄씩 끊으면 왕복만 수십 번이고,
+  // 보고 있는 장면의 번역이 몇 분 뒤에야 도착한다. 백엔드 상한은 요청당 500줄.
+  const FIRST_TRANSLATE_CHUNK = 30;
+  const TRANSLATE_CHUNK = 150;
+
+  /** 재생 시각 t 이후(또는 t를 포함하는) 첫 cue. 없으면 0. */
+  function firstCueAtOrAfter(cues, t) {
+    let lo = 0;
+    let hi = cues.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (cues[mid].end <= t) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo < cues.length ? lo : 0;
+  }
+
   async function loadTranslations(cues, provided) {
     const initial = Array.isArray(provided) ? provided : [];
     state.ko = cues.map((_, i) => initial[i] || '');
     LFJP.transcript.setTranslations(state.ko);
 
-    // Netflix에서는 서비스가 제공하는 공식 한국어 트랙을 일본어 cue와 시간으로
-    // 맞춘 값만 쓴다. 아직 한국어 트랙 다운로드가 끝나지 않았다면 다음
-    // NETFLIX_CUES 이벤트가 이 배열을 갱신한다. 그 사이 AI 번역으로 채우면 공식
-    // 자막과 섞이거나 뒤늦게 도착한 트랙을 덮어쓸 수 있다.
-    if (adapter.platform === 'netflix') {
-      LFJP.log(`Netflix 한국어 자막 — ${state.ko.filter(Boolean).length}/${cues.length}줄`);
+    // 지금 재생 중인 위치부터 채운다. 무조건 0번부터 훑으면 이미 지나간 앞부분을
+    // 다 번역한 뒤에야 화면의 한국어가 나온다 — 사용자에게는 "안 뜨는" 것과 같다.
+    const now = adapter.getCurrentTime();
+    const startIndex = typeof now === 'number' ? firstCueAtOrAfter(cues, now) : 0;
+
+    const missing = [];
+    for (let n = 0; n < cues.length; n++) {
+      const i = (startIndex + n) % cues.length;
+      if (!state.ko[i] && cues[i].text) missing.push(i);
+    }
+    if (!missing.length) {
+      LFJP.log(`번역 준비 완료 — 공식 자막 ${state.ko.filter(Boolean).length}/${cues.length}줄`);
       return;
     }
 
-    const missing = cues.map((cue, i) => ({ cue, i })).filter(({ i }) => !state.ko[i]);
-    // Chrome 내장 번역은 순차 처리되므로 작은 묶음마다 UI를 갱신한다.
-    const chunkSize = 10;
-    for (let start = 0; start < missing.length; start += chunkSize) {
-      const batch = missing.slice(start, start + chunkSize);
-      const res = await LFJP.api.translate(batch.map(({ cue }) => cue.text));
+    let cursor = 0;
+    let size = FIRST_TRANSLATE_CHUNK;
+    while (cursor < missing.length) {
+      const batch = missing.slice(cursor, cursor + size);
+      cursor += batch.length;
+      size = TRANSLATE_CHUNK;
+
+      const res = await LFJP.api.translate(batch.map((i) => cues[i].text));
       if (state.cues !== cues) return; // 그 사이 영상이 바뀌었다
       if (!res.ok) {
         if (!translateWarned) {
@@ -77,8 +103,8 @@
         }
         return;
       }
-      batch.forEach(({ i }, resultIndex) => {
-        state.ko[i] = (res.targets && res.targets[resultIndex]) || '';
+      batch.forEach((cueIndex, resultIndex) => {
+        state.ko[cueIndex] = (res.targets && res.targets[resultIndex]) || '';
       });
       LFJP.transcript.setTranslations(state.ko);
     }

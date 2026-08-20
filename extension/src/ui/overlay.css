@@ -624,9 +624,22 @@
   line-height: 1.65;
 }
 
+/* 원문과 번역 사이의 짧은 구분선.
+   두 줄 다 배경이 없는 학습 화면에서는 구분선이 없으면 한 문장처럼 붙어 읽힌다.
+   비어 있을 때(번역이 아직 안 왔거나 효과음 줄) 선만 남지 않도록 :empty 를 뺀다. */
 .lfjp-netflix-learning-player .lfjp-ko {
-  padding-top: 8px;
+  padding-top: 10px;
   color: rgba(255, 255, 255, 0.62);
+}
+
+.lfjp-netflix-learning-player .lfjp-ko:not(:empty)::before {
+  content: "";
+  display: block;
+  width: 240px;
+  max-width: 40%;
+  height: 1px;
+  margin: 0 auto 10px;
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .lfjp-cue-controls {

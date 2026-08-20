@@ -9,14 +9,23 @@ cd backend
 go run ./cmd/api          # http://localhost:8090
 ```
 
-**설정 없이 바로 뜬다.** `ANTHROPIC_API_KEY`나 `NLP_SERVICE_URL`이 없으면 스텁 provider로 모든 엔드포인트를 정상 응답한다 — 확장을 API 키 없이도 끝까지 테스트할 수 있게 하려는 의도.
+**설정 없이 바로 뜬다.** LLM 키나 `NLP_SERVICE_URL`이 없으면 스텁 provider로 모든 엔드포인트를 정상 응답한다 — 확장을 API 키 없이도 끝까지 테스트할 수 있게 하려는 의도.
+
+번역과 사전은 **Anthropic 또는 OpenAI** 중 하나로 돌아간다. 둘은 같은 인터페이스 뒤에 있고
+같은 프롬프트를 공유하므로 공급자를 바꿔도 툴팁에 나오는 항목 모양은 그대로다. 한 요청 안에서
+번역과 사전이 서로 다른 모델을 쓰는 일은 없다 — 한국어 줄을 읽고 그 줄의 단어를 눌렀을 때
+두 모델의 해석이 엇갈리면 안 되기 때문.
 
 | 환경변수 | 기본값 | 없을 때 동작 |
 |---|---|---|
 | `PORT` | `8090` | |
 | `ALLOWED_ORIGINS` | `*` | 개발용 전체 허용. 배포 전 반드시 지정 |
-| `ANTHROPIC_API_KEY` | — | 번역 줄을 비워두는 스텁 사용. **단어 뜻도 나오지 않는다**(`dict=stub`) |
+| `LLM_PROVIDER` | `auto` | `auto`는 키가 있는 쪽을 쓴다. `anthropic`/`openai`로 못박을 수 있고, 그쪽 키가 없으면 있는 쪽으로 되돌아간다 |
+| `ANTHROPIC_API_KEY` | — | 아래 `OPENAI_API_KEY`도 없으면 번역 줄이 비고 단어 뜻도 나오지 않는다(스텁) |
 | `ANTHROPIC_MODEL` | `claude-opus-5` | 번역과 사전이 함께 쓴다 |
+| `OPENAI_API_KEY` | — | OpenAI로 돌릴 때. Anthropic 키와 둘 중 하나만 있으면 된다 |
+| `OPENAI_MODEL` | `gpt-4.1` | Structured Outputs(`strict: true`)를 지원하는 모델이어야 한다 |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | 호환 엔드포인트를 쓸 때만 |
 | `NLP_SERVICE_URL` | — | 형태소 분석 대신 **문자 종류 기반 분절**로 대체(읽기·JLPT·뜻풀이 없음) |
 | `DATA_FILE` | — | 비어 있으면 인메모리. 경로를 주면 표현·복습 기록을 JSON으로 영속 저장 |
 | `DICT_CACHE_FILE` | — | 비어 있으면 사전 캐시가 재시작 때 사라진다(같은 단어를 다시 청구). 경로를 주면 JSON으로 영속 저장 |
@@ -168,9 +177,10 @@ cmd/api/            진입점 · provider 선택 · graceful shutdown
 internal/config/    환경변수 로딩
 internal/model/     Expression · Token · Analysis
 internal/store/     ExpressionStore 인터페이스 + 인메모리 구현
-internal/translate/ Translator 인터페이스 · Claude 구현 · 스텁 · 캐시 래퍼
+internal/llm/       공급자 클라이언트 공용부(OpenAI Chat Completions + JSON 스키마)
+internal/translate/ Translator 인터페이스 · Claude/OpenAI 구현 · 스텁 · 캐시 래퍼
 internal/nlp/       Analyzer 인터페이스 · NLP 서비스 프록시 · 문자종류 분절 스텁
-internal/dict/      Provider 인터페이스 · Claude 문맥 사전 · 스텁 · 캐시(+파일 영속)
+internal/dict/      Provider 인터페이스 · Claude/OpenAI 문맥 사전 · 스텁 · 캐시(+파일 영속)
 internal/httpapi/   라우터 · CORS · 핸들러
 ```
 
